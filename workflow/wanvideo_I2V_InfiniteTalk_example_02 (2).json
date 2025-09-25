@@ -10,7 +10,7 @@
   },
   "122": {
     "inputs": {
-      "model": "wan2.1-i2v-14b-480p-Q8_0.gguf",
+      "model": "wan2.1-i2v-14b-480p-Q4_0.gguf",
       "base_precision": "fp16_fast",
       "quantization": "disabled",
       "load_device": "offload_device",
