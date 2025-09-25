@@ -29,7 +29,7 @@ VIDEO_RETENTION_HOURS = int(os.getenv("VIDEO_RETENTION_HOURS", 72))  # Giữ vid
 CLEANUP_INTERVAL_MINUTES = int(os.getenv("CLEANUP_INTERVAL_MINUTES", 60))  # Cleanup mỗi 60 phút
 # =======================================
 SERVER_COMFYUI="127.0.0.1:8188"
-WORKFLOW_INFINITETALK_PATH="/workflow/wanvideo_infinitetalk_single_example_19_8 (1).json"
+WORKFLOW_INFINITETALK_PATH="/workflow/wanvideo_I2V_InfiniteTalk_example_02 (2).json"
 # =======================================
 from dotenv import load_dotenv
 import os
@@ -45,12 +45,9 @@ class DirectusConfig:
 from datetime import datetime
 from pymongo import MongoClient
 
-# MongoDB Configuration
+
 pass_db=os.getenv("MONGODB_PASSWORD","MONGODB_Pass")
-MONGODB_URI = os.getenv(
-    "MONGODB_URI",
-    f"mongodb://admin:{pass_db}@87.106.214.210:27017"
-)
+MONGODB_URI = os.getenv("MONGODB_URI", "")
 MONGODB_DB_NAME = os.getenv("MONGODB_DB_NAME", "anymateme_eduhub_prod")
 MONGODB_JOBS_COLLECTION = os.getenv("MONGODB_JOBS_COLLECTION", "video_jobs")
 MONGODB_EFFECT_JOBS_COLLECTION = os.getenv("MONGODB_EFFECT_JOBS_COLLECTION", "effect_jobs")

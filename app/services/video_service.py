@@ -57,24 +57,11 @@ class VideoService:
             if path_directus is not None and output_path.exists() :
                 print(f"Video upload successfully: {path_directus}")
                 print(f"Job ID: {job_id}, Output Path: {path_directus}")
-                os.remove(str(output_path))
+                # os.remove(str(output_path))
                 return str(path_directus),list_scene
             else:
                 raise Exception("Cannot upload video to Directus or Video creation failed - output file not found")
-            # return str(output_path),list_scene
-            # =====================Test=================================
-            # await asyncio.sleep(2)  
-            # await job_service.update_job_status(job_id, "processing", progress=60)
-            
-            # await asyncio.sleep(2)  
-            # await job_service.update_job_status(job_id, "processing", progress=90)
-            
-            # ==== END CODE ====
-            # if output_path.exists():
-            #     return str(path_directus),list_scene
-            # else:
-            #     raise Exception("Video creation failed - output file not found")
-                
+    
         except Exception as e:
             if output_path.exists():
                 output_path.unlink()
@@ -123,18 +110,18 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
             # print(job_id)
             # =================================================================
             file_path = str(cond_images[current_value])
-            file_root, file_ext = os.path.splitext(file_path)
+            # file_root, file_ext = os.path.splitext(file_path)
 
-            crop_file = f"{file_root}_crop{file_ext}"
-            pad_file = f"{file_root}_pad{file_ext}"
-            crop_green_background(file_path, crop_file, margin=0.04)
-            resize_and_pad(crop_file, pad_file)
+            # crop_file = f"{file_root}_crop{file_ext}"
+            # pad_file = f"{file_root}_pad{file_ext}"
+            # crop_green_background(file_path, crop_file, margin=0.04)
+            # resize_and_pad(crop_file, pad_file)
             # crop_green_background(cond_images[current_value], str(cond_images[current_value].replace(".png", "_crop.png")), margin=0.04)
             # resize_and_pad(str(cond_images[current_value].replace(".png", "_crop.png")), str(cond_images[current_value].replace(".png", "_pad.png")))
             
             output=await generate_video_cmd(
                 prompt=prompts[current_value],
-                cond_image=str(pad_file),# 
+                cond_image=str(file_path),# 
                 cond_audio_path=audiohavesecondatstart, 
                 output_path=clip_name,
                 job_id=job_id,
@@ -144,8 +131,8 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
             output_file=cut_video(clip_name, get_audio_duration(output_path)-0.5) 
             results.append(output_file)
             try:
-                os.remove(pad_file)
-                os.remove(crop_file)
+                # os.remove(pad_file)
+                # os.remove(crop_file)
                 os.remove(output_path)
                 os.remove(clip_name)
                 os.remove(audiohavesecondatstart)
@@ -156,17 +143,17 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
         output_file1 = concat_videos(results, concat_name)
         from merge_video_audio import replace_audio_trimmed
         output_file = replace_audio_trimmed(output_file1,cond_audio_path,output_path_video)
-        replace_green_screen(
-            video_path=str(output_path_video),
-            background_path=background,  
-        )
+        # replace_green_screen(
+        #     video_path=str(output_path_video),
+        #     background_path=background,  
+        # )
         try:
             os.remove(output_file1)
-            for path in cond_images:
-                os.remove(str(path))
-            os.remove(cond_audio_path)
             for file in results:
                 os.remove(file)
+            for path in cond_images:
+                os.remove(path)
+            os.remove(cond_audio_path)
         except Exception as e:
             print(f"❌ Error removing temporary files: {str(e)}")
         return list_scene
@@ -181,10 +168,10 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
         file_root, file_ext = os.path.splitext(file_path)
 
         # Tạo file mới theo suffix mong muốn
-        crop_file = f"{file_root}_crop{file_ext}"
-        pad_file = f"{file_root}_pad{file_ext}"
-        crop_green_background(file_path, crop_file, margin=0.04)
-        resize_and_pad(crop_file, pad_file)
+        # crop_file = f"{file_root}_crop{file_ext}"
+        # pad_file = f"{file_root}_pad{file_ext}"
+        # crop_green_background(file_path, crop_file, margin=0.04)
+        # resize_and_pad(crop_file, pad_file)
         # crop_green_background(cond_images[0], str(cond_images[0].replace(".png", "_crop.png")), margin=0.04)
         # resize_and_pad(str(cond_images[0].replace(".png", "_crop.png")), str(cond_images[0].replace(".png", "_pad.png")))
         # ======================================================
@@ -195,7 +182,7 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
         # print("============== ",str(cond_images[0].replace(".png", "_crop.png")))
         output=await generate_video_cmd(
             prompt=prompts[0], 
-            cond_image=str(pad_file), 
+            cond_image=file_path, 
             cond_audio_path=audiohavesecondatstart, 
             output_path=generate_output_filename,
             job_id=job_id,
@@ -210,18 +197,15 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
         try:
             os.remove(str(generate_output_filename))
             os.remove(str(audiohavesecondatstart))
-            os.remove(str(pad_file))
-            os.remove(str(crop_file))
-            for path in cond_images:
-                os.remove(str(path))
-            os.remove(cond_audio_path)
+            os.remove(str(cond_audio_path))
+            os.remove(str(file_path))
         except Exception as e:
             print(f"❌ Error removing temporary files: {str(e)}")
         # print("sdf5")
-        replace_green_screen(
-            video_path=str(output_path_video),
-            background_path=background,  
-        )
+        # replace_green_screen(
+        #     video_path=str(output_path_video),
+        #     background_path=background,  
+        # )
         # print("sdf6")
 
         return list_scene
@@ -399,20 +383,66 @@ async def generate_video_cmd(prompt, cond_image, cond_audio_path, output_path, j
 
     try:
         print("🔄 Đang load workflow...")
+        workflow = await load_workflow(str(BASE_DIR) + "/" + WORKFLOW_INFINITETALK_PATH)  
+# ===========================================================================
+        # workflow["203"]["inputs"]["image"] = cond_image
+        # workflow["125"]["inputs"]["audio"] = cond_audio_path
+        
+        # if prompt.strip() == "" or prompt is None or prompt == "none":
+        #     # workflow["135"]["inputs"]["positive_prompt"] = "Mouth moves in sync with speech. A person is sitting in a side-facing position, with their face turned toward the left side of the frame and the eyes look naturally forward in that left-facing direction without shifting. Speaking naturally, as if having a conversation. He always kept his posture and gaze straight without turning his head."    
+        #     workflow["135"]["inputs"]["positive_prompt"] = "Mouth moves in sync with speech. A person is sitting in a side-facing position, with their face turned toward the left side of the frame and the eyes look naturally forward in that left-facing direction without shifting. Speaking naturally, as if having a conversation. He mostly keeps his posture and gaze straight without turning his head, but occasionally makes small, natural gestures with the head or hands to emphasize the speech, adding subtle liveliness to the video."    
+        # else:
+        #     workflow["135"]["inputs"]["positive_prompt"] = prompt
+            
+        # workflow["135"]["inputs"]["negative_prompt"] = "change perspective, bright tones, overexposed, static, blurred details, subtitles, style, works, paintings, images, static, overall gray, worst quality, low quality, JPEG compression residue, ugly, incomplete, extra fingers, poorly drawn hands, poorly drawn faces, deformed, disfigured, misshapen limbs, fused fingers, still picture, messy background, three legs, many people in the background, walking backwards"
+        # wf_h=448
+        # wf_w=448
+        # if resolution == "1080x1920":
+        #     wf_w = 1080
+        #     wf_h = 1920
+        # elif resolution=="1920x1080":
+        #     wf_w = 1920
+        #     wf_h = 1080
+        # elif resolution=="720x1280":
+        #     wf_w = 720
+        #     wf_h = 1280
+        #     # workflow["208"]["inputs"]["frame_window_size"] = 41
+        # elif resolution=="480x854": 
+        #     wf_w = 480
+        #     wf_h = 854
+        # elif resolution=="854x480": 
+        #     wf_w = 854
+        #     wf_h = 480
+        # elif resolution=="1280x720":    
+        #     wf_w = 1280
+        #     wf_h = 720 
+        
+        #     # workflow["208"]["inputs"]["frame_window_size"] = 41
+        # img = Image.open(cond_image)
+        # width_real, height_real = img.size
+        # workflow["211"]["inputs"]["value"] = width_real
+        # workflow["212"]["inputs"]["value"] = height_real
 
-        workflow = await load_workflow(str(BASE_DIR) + "/" + WORKFLOW_INFINITETALK_PATH)
-        # ============================================================
-        # await crop_green_background(cond_image, str(cond_image.replace(".png", "_crop.png")))
-        workflow["203"]["inputs"]["image"] = cond_image
-        # =============================================================
+        # workflow["211"]["inputs"]["value"] = 608
+        # workflow["212"]["inputs"]["value"] = 608
+        # img.close()
+        # prefix = job_id
+        # workflow["131"]["inputs"]["filename_prefix"] = prefix
+
+# ===========================================================================
+        workflow["284"]["inputs"]["image"] = cond_image
         workflow["125"]["inputs"]["audio"] = cond_audio_path
         
+        workflow["270"]["inputs"]["value"] = int(get_audio_duration(cond_audio_path)*30)
+        # =============================================================
+        
+        
         if prompt.strip() == "" or prompt is None or prompt == "none":
-            workflow["135"]["inputs"]["positive_prompt"] = "Mouth moves in sync with speech. A person is sitting in a side-facing position, with their face turned toward the left side of the frame and the eyes look naturally forward in that left-facing direction without shifting. Speaking naturally, as if having a conversation. He always kept his posture and gaze straight without turning his head."    
+            workflow["241"]["inputs"]["positive_prompt"] = "A photorealistic, high-quality video of the person in a side-facing position, slightly turned to the left. The person remains calm and professional: the head, eyes, and facial muscles are stable, with minimal facial expressions. The mouth moves gently and smoothly in perfect sync with the audio. The hands and arms move naturally to accompany speech, adding subtle, realistic gestures. The overall look is natural, professional, stable, and expressive, like a relaxed, engaging conversation."    
         else:
-            workflow["135"]["inputs"]["positive_prompt"] = prompt
+            workflow["241"]["inputs"]["positive_prompt"] = prompt
             
-        workflow["135"]["inputs"]["negative_prompt"] = "change perspective, bright tones, overexposed, static, blurred details, subtitles, style, works, paintings, images, static, overall gray, worst quality, low quality, JPEG compression residue, ugly, incomplete, extra fingers, poorly drawn hands, poorly drawn faces, deformed, disfigured, misshapen limbs, fused fingers, still picture, messy background, three legs, many people in the background, walking backwards"
+        workflow["241"]["inputs"]["negative_prompt"] = "excessive head movement, nodding, tilting, shaking, turning face away, unstable body, exaggerated expressions, eyebrow movement, cheek movement, eye shifting, blinking too much, distorted lips, unnatural lip sync, jerky motion, overacting, unrealistic expressions, blurry frames, warped anatomy, unnatural gestures, unstable rendering"
         wf_h=448
         wf_w=448
         if resolution == "1080x1920":
@@ -421,33 +451,30 @@ async def generate_video_cmd(prompt, cond_image, cond_audio_path, output_path, j
         elif resolution=="1920x1080":
             wf_w = 1920
             wf_h = 1080
-        elif resolution=="720x1280":
-            wf_w = 720
-            wf_h = 1280
             # workflow["208"]["inputs"]["frame_window_size"] = 41
         elif resolution=="480x854": 
             wf_w = 480
-            wf_h = 854
+            wf_h = 864
         elif resolution=="854x480": 
-            wf_w = 854
+            wf_w = 864
             wf_h = 480
         elif resolution=="1280x720":    
-            wf_w = 1280
-            wf_h = 720 
-        
-            # workflow["208"]["inputs"]["frame_window_size"] = 41
-        img = Image.open(cond_image)
-        width_real, height_real = img.size
-        workflow["211"]["inputs"]["value"] = width_real
-        workflow["212"]["inputs"]["value"] = height_real
+            wf_w = 1040
+            wf_h = 592 
+        elif resolution=="720x1280":
+            wf_w = 592
+            wf_h = 1040
 
-        # workflow["211"]["inputs"]["value"] = 608
-        # workflow["212"]["inputs"]["value"] = 608
-        img.close()
+        workflow["245"]["inputs"]["value"] = wf_w
+        workflow["246"]["inputs"]["value"] = wf_h
+        # workflow["245"]["inputs"]["value"] = 448
+        # workflow["246"]["inputs"]["value"] = 800
+        # img.close()
 
         prefix = job_id
         workflow["131"]["inputs"]["filename_prefix"] = prefix
 
+# ===========================================================================
         print("📤 Đang gửi workflow đến ComfyUI...")
 
         resp = await queue_prompt(workflow)
@@ -466,17 +493,34 @@ async def generate_video_cmd(prompt, cond_image, cond_audio_path, output_path, j
         
         if video_path:
             # await delete_file_async(str(cond_image.replace(".png", "_crop.png")))  
-            await add_green_background(video_path, str(video_path.replace(".mp4", "_greenbg.mp4")), target_w=wf_w, target_h=wf_h)
-            await delete_file_async(video_path)
+            # await add_green_background(video_path, str(video_path.replace(".mp4", "_greenbg.mp4")), target_w=wf_w, target_h=wf_h)
+            # await delete_file_async(video_path)
+            # await delete_file_async(str(cond_audio_path))
+            # await delete_file_async(str(cond_image))
+
             await delete_file_async(str(video_path.replace("-audio.mp4",".mp4")))
             await delete_file_async(str(video_path.replace("-audio.mp4",".png")))
-            video_path = str(video_path.replace(".mp4", "_greenbg.mp4"))
-            print(f"🎬 Video được tạo tại: {video_path}")
+            # video_path = str(video_path.replace(".mp4", "_greenbg.mp4"))
+            # print(f"🎬 Video được tạo tại: {video_path}")
             file_size = os.path.getsize(video_path)
             print(f"📏 Kích thước file: {file_size / (1024*1024):.2f} MB")
-            
-            await move_file_async(str(video_path),str(output_path))
+            wf_w = 720
+            wf_h = 1280
+            if resolution=="1280x720":    
+                wf_w = 1280
+                wf_h = 720 
+            print("======fsdf")
+            await scale_video(
+                input_path=video_path,
+                output_path=output_path,
+                target_w=wf_w,
+                target_h=wf_h
+            )
+            print("sdfssgsgggwe")
+            await delete_file_async(str(video_path))
+            # await move_file_async(str(video_path),str(output_path))
             print("dfsdfs-----")
+
             return output_path
         else:
             print("❌ Không tìm thấy video")
@@ -497,3 +541,84 @@ async def delete_file_async(file_path: str):
     
     loop = asyncio.get_event_loop()
     await loop.run_in_executor(None, delete_file)
+# ===============================================================
+import cv2
+import os
+
+async def scale_video(input_path, output_path, target_w, target_h):
+
+    # Kiểm tra file input
+    if not os.path.exists(input_path):
+        raise FileNotFoundError(f"File không tồn tại: {input_path}")
+    
+    # Mở video để lấy thông tin
+    cap = cv2.VideoCapture(input_path)
+    if not cap.isOpened():
+        raise ValueError(f"Không thể mở video: {input_path}")
+    
+    # Lấy thông tin video gốc
+    orig_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    orig_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    
+    # Tính toán scale theo công thức của bạn
+    scale_w = target_w / orig_w
+    scale_h = target_h / orig_h
+    scale = max(scale_w, scale_h)
+    
+    # Kích thước mới sau khi scale
+    new_w = int(orig_w * scale)
+    new_h = int(orig_h * scale)
+    
+    # Thông tin để return
+    info = {
+        'original_size': (orig_w, orig_h),
+        'target_size': (target_w, target_h),
+        'scale_factor': scale,
+        'final_size': (new_w, new_h),
+        'fps': fps,
+        'total_frames': total_frames
+    }
+    
+    print(f"Video gốc: {orig_w}x{orig_h}")
+    print(f"Target size: {target_w}x{target_h}")
+    print(f"Scale factor: {scale:.4f}")
+    print(f"Kích thước cuối: {new_w}x{new_h}")
+    
+    # Reset video để đọc từ đầu
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    
+    # Thiết lập video writer với kích thước mới (không crop/pad)
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_path, fourcc, fps, (new_w, new_h))
+    
+    frame_count = 0
+    print("Đang xử lý video...")
+    
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        # Scale frame đến kích thước mới
+        scaled_frame = cv2.resize(frame, (new_w, new_h))
+        
+        # Ghi frame (không crop hay pad)
+        out.write(scaled_frame)
+        
+        frame_count += 1
+        
+        # Hiển thị tiến độ mỗi 30 frame
+        if frame_count % 30 == 0:
+            progress = (frame_count / total_frames) * 100
+            print(f"Tiến độ: {progress:.1f}%")
+    
+    # Giải phóng resources
+    cap.release()
+    out.release()
+    # cv2.destroyAllWindows()
+    
+    print(f"Hoàn thành! Video saved: {output_path}")
+    
+    return info

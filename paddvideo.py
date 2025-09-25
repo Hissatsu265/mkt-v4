@@ -268,3 +268,116 @@ def resize_and_pad(image_path: str, output_path: str):
 
 # Ví dụ chạy
 # resize_and_pad("/content/0f8d203c-dc10-4094-8b9e-45864d2cf337 sdsadasfafa.JPG", "output.jpg")
+# ==========================================================================================
+import cv2
+import os
+
+def scale_video(input_path, output_path, target_w, target_h):
+    """
+    Scale video theo công thức: scale = max(target_w/orig_w, target_h/orig_h)
+    
+    Args:
+        input_path (str): Đường dẫn video input
+        output_path (str): Đường dẫn video output
+        target_w (int): Chiều rộng mong muốn
+        target_h (int): Chiều cao mong muốn
+    
+    Returns:
+        dict: Thông tin về quá trình scale
+    """
+    
+    # Kiểm tra file input
+    if not os.path.exists(input_path):
+        raise FileNotFoundError(f"File không tồn tại: {input_path}")
+    
+    # Mở video để lấy thông tin
+    cap = cv2.VideoCapture(input_path)
+    if not cap.isOpened():
+        raise ValueError(f"Không thể mở video: {input_path}")
+    
+    # Lấy thông tin video gốc
+    orig_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    orig_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    
+    # Tính toán scale theo công thức của bạn
+    scale_w = target_w / orig_w
+    scale_h = target_h / orig_h
+    scale = max(scale_w, scale_h)
+    
+    # Kích thước mới sau khi scale
+    new_w = int(orig_w * scale)
+    new_h = int(orig_h * scale)
+    
+    # Thông tin để return
+    info = {
+        'original_size': (orig_w, orig_h),
+        'target_size': (target_w, target_h),
+        'scale_factor': scale,
+        'final_size': (new_w, new_h),
+        'fps': fps,
+        'total_frames': total_frames
+    }
+    
+    print(f"Video gốc: {orig_w}x{orig_h}")
+    print(f"Target size: {target_w}x{target_h}")
+    print(f"Scale factor: {scale:.4f}")
+    print(f"Kích thước cuối: {new_w}x{new_h}")
+    
+    # Reset video để đọc từ đầu
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    
+    # Thiết lập video writer với kích thước mới (không crop/pad)
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_path, fourcc, fps, (new_w, new_h))
+    
+    frame_count = 0
+    print("Đang xử lý video...")
+    
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        # Scale frame đến kích thước mới
+        scaled_frame = cv2.resize(frame, (new_w, new_h))
+        
+        # Ghi frame (không crop hay pad)
+        out.write(scaled_frame)
+        
+        frame_count += 1
+        
+        # Hiển thị tiến độ mỗi 30 frame
+        if frame_count % 30 == 0:
+            progress = (frame_count / total_frames) * 100
+            print(f"Tiến độ: {progress:.1f}%")
+    
+    # Giải phóng resources
+    cap.release()
+    out.release()
+    cv2.destroyAllWindows()
+    
+    print(f"Hoàn thành! Video saved: {output_path}")
+    
+    return info
+
+# # Ví dụ sử dụng
+# if __name__ == "__main__":
+#     # Ví dụ gọi hàm
+#     try:
+#         result = scale_video(
+#             input_path="/content/WanVideo2_1_InfiniteTalk_00013-audio.mp4",
+#             output_path="output_video.mp4", 
+#             target_w=854,
+#             target_h=480
+#         )
+        
+#         print("\n=== KẾT QUẢ ===")
+#         print(f"Kích thước gốc: {result['original_size']}")
+#         print(f"Kích thước target: {result['target_size']}")
+#         print(f"Scale factor: {result['scale_factor']:.4f}")
+#         print(f"Kích thước cuối: {result['final_size']}")
+        
+#     except Exception as e:
+#         print(f"Lỗi: {e}")
