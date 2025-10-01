@@ -1,238 +1,321 @@
-# Marketing Video AI - API Testing Guide
+# Marketing Video AI - API Documentation
 
-This guide provides step-by-step instructions for setting up and testing the Marketing Video AI API.
+## System Requirements
 
-## Prerequisites
-
-- Python 3.8+
-- CUDA-compatible GPU (recommended)
-- Git
+- Python 3.10+
+- PyTorch >= 2.7.0.dev
+- CUDA 12.4
+- FFmpeg
+- MongoDB
 
 ## Installation
 
-### 1. Clone the Repository
+### 1. Install Basic Dependencies
 
 ```bash
-git clone https://github.com/shohanursobuj/marketing-video-ai.git
-cd marketing-video-ai
-git checkout MinhToan1
-```
-
-### 2. Install Dependencies
-
-Execute the following commands in order:
-
-```bash
-# Uninstall conflicting packages
-pip uninstall -y tensorflow jax jaxlib
-pip uninstall -y torch torchvision torchaudio xformers flash-attn
-
-# Install PyTorch with CUDA support
-pip install torch==2.4.1 torchvision==0.19.1 torchaudio==2.4.1 --index-url https://download.pytorch.org/whl/cu121
-
-# Install xformers and flash-attn
-pip install -U xformers==0.0.28 --index-url https://download.pytorch.org/whl/cu121
-pip install flash-attn==2.6.1 --no-build-isolation
-
-# Install ML libraries
-pip install transformers==4.49.0 peft
-pip install accelerate
-
-# Install project requirements
-pip install -r requirements.txt
-
-# Install system dependencies
-apt-get update && apt-get install -y ffmpeg
-
-# Install additional Python packages
-pip install ninja psutil packaging
-
-# Fix numpy version
-pip uninstall numpy
-pip install numpy==1.26.4
-
-# Install web framework dependencies
 pip install --upgrade pip
+pip install pyngrok
+pip install pymongo
+pip install motor
 pip install fastapi==0.115.0
 pip install uvicorn[standard]==0.32.0  
 pip install pydantic==2.11.7
 pip install redis==5.2.1
 pip install aiofiles==24.1.0
 pip install python-multipart==0.0.12
-pip install protobuf --upgrade
-
-# Install media processing libraries
-pip install moviepy==1.0.3
-pip install mediapipe
+pip install -r requirements.txt
 pip install mutagen
-pip install redis
 ```
 
-## Running the Server
+### 2. Install PyTorch
 
-To start the API server, simply run:
+**Important Note:** PyTorch >= 2.7.0.dev is required for system stability.
 
 ```bash
-python run.py
+pip uninstall -y torch torchvision torchaudio
+pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/test/cu124
+pip install torchvision torchaudio --no-deps --index-url https://download.pytorch.org/whl/test/cu124
 ```
 
-The server will start on `http://localhost:8000`
+### 3. Install FFmpeg
 
-## API Endpoints
+```bash
+apt-get update && apt-get install -y ffmpeg
+```
 
-### 1. Create Video
+### 4. Configure Ngrok
 
-Creates a new video from images and audio.
+```bash
+ngrok config add-authtoken YOUR_AUTHTOKEN_HERE
+```
+
+### 5. Install ComfyUI Custom Nodes
+
+Navigate to the custom_nodes directory:
+
+```bash
+cd marketing-video-ai/ComfyUI/custom_nodes
+```
+
+Install each node:
+
+```bash
+# ComfyUI-WanVideoWrapper
+cd ComfyUI-WanVideoWrapper
+pip install -r requirements.txt
+cd ..
+
+# InfiniteTalk
+cd InfiniteTalk
+pip install -r requirements.txt
+cd ..
+
+# audio-separation-nodes-comfyui
+cd audio-separation-nodes-comfyui
+pip install -r requirements.txt
+cd ..
+
+# comfyui-kjnodes
+cd comfyui-kjnodes
+pip install -r requirements.txt
+cd ..
+
+# comfyui-videohelpersuite
+cd comfyui-videohelpersuite
+pip install -r requirements.txt
+cd ..
+
+# ComfyUI-MelBandRoFormer
+cd ComfyUI-MelBandRoFormer
+pip install -r requirements.txt
+cd ..
+```
+
+## Download Models
+
+### 1. Create Model Directories
+
+```bash
+mkdir -p marketing-video-ai/ComfyUI/models/diffusion_models
+mkdir -p marketing-video-ai/ComfyUI/models/text_encoders
+mkdir -p marketing-video-ai/ComfyUI/models/clip_vision
+mkdir -p marketing-video-ai/ComfyUI/models/vae
+mkdir -p marketing-video-ai/ComfyUI/models/loras
+```
+
+### 2. Download Required Models
+
+**Note:** The paths in the wget commands below are relative. Adjust them according to your actual environment path.
+
+```bash
+# Download Wan 2.1 I2V 14B 480P Q8
+wget -O marketing-video-ai/ComfyUI/models/diffusion_models/wan2.1-i2v-14b-480p-Q8_0.gguf \
+"https://huggingface.co/city96/Wan2.1-I2V-14B-480P-gguf/resolve/main/wan2.1-i2v-14b-480p-Q8_0.gguf?download=true"
+
+# Download Wan 2.1 I2V 14B 480P Q4
+wget -O marketing-video-ai/ComfyUI/models/diffusion_models/wan2.1-i2v-14b-480p-Q4_0.gguf \
+"https://huggingface.co/city96/Wan2.1-I2V-14B-480P-gguf/resolve/main/wan2.1-i2v-14b-480p-Q4_0.gguf"
+
+# Download MelBandRoFormer
+wget -O marketing-video-ai/ComfyUI/models/diffusion_models/MelBandRoformer_fp16.safetensors \
+"https://huggingface.co/Kijai/MelBandRoFormer_comfy/resolve/main/MelBandRoformer_fp16.safetensors?download=true"
+
+# Download UMT5 Text Encoder
+wget -O marketing-video-ai/ComfyUI/models/text_encoders/umt5-xxl-enc-bf16.safetensors \
+"https://huggingface.co/Serenak/chilloutmix/resolve/main/umt5-xxl-enc-bf16.safetensors"
+
+# Download CLIP Vision
+wget -O marketing-video-ai/ComfyUI/models/clip_vision/clip_vision_h.safetensors \
+"https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/clip_vision/clip_vision_h.safetensors"
+
+# Download VAE
+wget -O marketing-video-ai/ComfyUI/models/vae/Wan2_1_VAE_bf16.safetensors \
+"https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/Wan2_1_VAE_bf16.safetensors"
+
+# Download InfiniteTalk
+wget -O marketing-video-ai/ComfyUI/models/diffusion_models/Wan2_1-InfiniteTalk_Single_Q8.gguf \
+"https://huggingface.co/Kijai/WanVideo_comfy_GGUF/resolve/main/InfiniteTalk/Wan2_1-InfiniteTalk_Single_Q8.gguf"
+
+# Download Lightx2v LoRA
+wget -O marketing-video-ai/ComfyUI/models/loras/lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors \
+"https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/Lightx2v/lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors"
+```
+
+## API Usage Guide
+
+### Starting the Server
+
+```bash
+uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+### API Endpoints
+
+#### 1. Create Video
 
 **Endpoint:** `POST /api/v1/videos/create`
 
+Creates a new video from images and audio.
+
 **Request Structure:**
+
 ```bash
 curl -X POST "http://localhost:8000/api/v1/videos/create" \
   -H "Content-Type: application/json" \
   -d '{
-    "image_paths": ["/home/toan/marketing-video-ai/assets/justin-bieber-cái.JPG","/home/toan/marketing-video-ai/assets/justin-bieber-cái.JPG"],
-    "prompts": ["",""],
-    "audio_path": "/home/toan/marketing-video-ai/audio/oskar_1s.wav",
+    "image_paths": [
+      "/path/to/image1.jpg",
+      "/path/to/image2.jpg"
+    ],
+    "prompts": ["", ""],
+    "audio_path": "/path/to/audio.wav",
     "resolution": "1280x720"
   }'
 ```
 
 **Parameters:**
-- `image_paths`: Array of image file paths
-- `prompts`: Array of prompts (can be empty strings)
-- `audio_path`: Path to audio file
-- `resolution`: Video resolution (see supported resolutions below)
+
+- `image_paths` (array, required): Array of image file paths
+- `prompts` (array, required): Array of prompts corresponding to each image (can be empty strings "")
+- `audio_path` (string, required): Path to audio file
+- `resolution` (string, required): Output video resolution
 
 **Supported Resolutions:**
-- `1280x720` (HD)
-- `854x480` (SD)
-- `720x1280` (Vertical HD)
-- `480x854` (Vertical SD)
+
+- `1280x720` - HD Landscape
+- `854x480` - SD Landscape
+- `720x1280` - HD Portrait
+- `480x854` - SD Portrait
 - And more...
 
 **Response:**
-Returns a job ID for tracking the video creation progress.
 
-### 2. Check Job Status
+```json
+{
+  "job_id": "unique-job-id-here",
+  "status": "processing",
+  "message": "Video creation job started"
+}
+```
 
-Check the status of a video creation job.
+#### 2. Check Job Status
 
 **Endpoint:** `GET /api/v1/jobs/{job_id}/status`
 
+Check the progress of a video creation job.
+
 **Request Structure:**
+
 ```bash
-curl "http://localhost:8000/api/v1/jobs/<job_id>/status"
+curl "http://localhost:8000/api/v1/jobs/{job_id}/status"
 ```
 
-Replace `<job_id>` with the actual job ID returned from the create video endpoint.
+Replace `{job_id}` with the actual job ID returned from the create video endpoint.
 
-### 3. Add Video Effects
+**Response:**
 
-Apply transition and dolly effects to an existing video.
+```json
+{
+  "job_id": "unique-job-id-here",
+  "status": "completed",
+  "progress": 100,
+  "video_url": "/path/to/output/video.mp4",
+  "created_at": "2025-10-01T10:00:00Z",
+  "completed_at": "2025-10-01T10:05:00Z"
+}
+```
 
-**Endpoint:** `POST /api/v1/videos/effects`
+**Possible Status Values:**
 
-**Request Structure:**
+- `pending` - Waiting to be processed
+- `processing` - Currently processing
+- `completed` - Successfully completed
+- `failed` - Failed to process
+
+## Usage Examples
+
+### Example 1: Create Simple Video
+
 ```bash
-curl -X POST "http://localhost:8000/api/v1/videos/effects" \
+curl -X POST "http://localhost:8000/api/v1/videos/create" \
   -H "Content-Type: application/json" \
   -d '{
-    "video_path": "/root/marketing-video-ai/55c95f56_clip_0_cut_11.49s.mp4",
-    "transition_times": [2.5, 5.0],
-    "transition_effects": ["slide", "fade_in"],
-    "transition_durations": [0.5, 1.0],
-    "dolly_effects": [
-      {
-        "scene_index": 0,
-        "start_time": 1.5,
-        "duration": 1.0,
-        "zoom_percent": 50,
-        "effect_type": "auto_zoom",
-        "end_time": 5.0
-      },
-      {
-        "scene_index": 1,
-        "start_time": 3.0,
-        "duration": 1.5,
-        "zoom_percent": 50,
-        "effect_type": "manual_zoom",
-        "x_coordinate": 100,
-        "y_coordinate": 100,
-        "end_time": 6.0,
-        "end_type": "smooth"
-      }
-    ]
+    "image_paths": [
+      "/home/user/images/photo1.jpg"
+    ],
+    "prompts": [""],
+    "audio_path": "/home/user/audio/voice.wav",
+    "resolution": "1280x720"
   }'
 ```
 
-**Parameters:**
+### Example 2: Create Video with Multiple Images
 
-#### Transition Effects
-- `transition_times`: Array of times when transitions occur
-- `transition_effects`: Array of transition effect names
-- `transition_durations`: Array of transition durations
+```bash
+curl -X POST "http://localhost:8000/api/v1/videos/create" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "image_paths": [
+      "/home/user/images/scene1.jpg",
+      "/home/user/images/scene2.jpg",
+      "/home/user/images/scene3.jpg"
+    ],
+    "prompts": [
+      "A person talking",
+      "Smiling face",
+      "Waving goodbye"
+    ],
+    "audio_path": "/home/user/audio/narration.wav",
+    "resolution": "720x1280"
+  }'
+```
 
-#### Dolly Effects
-- `scene_index`: Index of the scene to apply effect
-- `start_time`: When the effect starts
-- `duration`: Duration of the effect
-- `zoom_percent`: Zoom percentage
-- `effect_type`: Type of zoom effect (`auto_zoom` or `manual_zoom`)
-- `end_time`: When the effect ends
-- `x_coordinate`, `y_coordinate`: Target coordinates (for manual zoom)
-- `end_type`: End transition type (`instant` or `smooth`)
+## Error Handling
 
-## Available Transition Effects
+The API returns standard HTTP error codes:
 
-The following transition effects are supported:
+- `200` - Success
+- `400` - Bad Request
+- `404` - Not Found
+- `500` - Internal Server Error
 
-- `slide` - Slide transition
-- `rotate` - Rotation effect
-- `circle_mask` - Circular mask transition
-- `fade_in` - Fade in effect
-- `fade_out` - Fade out effect
-- `fadeout_fadein` - Combined fade out and fade in
-- `crossfade` - Cross fade between scenes
-- `rgb_split` - RGB color split effect
-- `flip_horizontal` - Horizontal flip
-- `flip_vertical` - Vertical flip
-- `push_blur` - Push with blur effect
-- `squeeze_horizontal` - Horizontal squeeze
-- `wave_distortion` - Wave distortion effect
-- `zoom_blur` - Zoom with blur
-- `spiral` - Spiral transition
-- `pixelate` - Pixelation effect
-- `shatter` - Shatter effect
-- `kaleidoscope` - Kaleidoscope effect
-- `page_turn` - Page turning effect
-- `television` - TV static effect
-- `film_burn` - Film burn effect
-- `matrix_rain` - Matrix rain effect
-- `old_film` - Old film effect
-- `mosaic_blur` - Mosaic blur effect
-- `lens_flare` - Lens flare effect
-- `digital_glitch` - Digital glitch effect
-- `waterfall` - Waterfall effect
-- `honeycomb` - Honeycomb pattern effect
-- `none` - No transition effect
+**Error Response Example:**
 
-## End Types
+```json
+{
+  "error": "Invalid resolution format",
+  "message": "Resolution must be in format WIDTHxHEIGHT",
+  "status_code": 400
+}
+```
 
-For dolly effects, the following end types are available:
-- `instant` - Immediate transition
-- `smooth` - Gradual transition
+## Important Notes
+
+- Ensure all file paths (image_paths, audio_path) exist and have read permissions
+- Supported audio formats: WAV, MP3, OGG
+- Supported image formats: JPG, JPEG, PNG
+- Processing time depends on resolution and number of images
+- GPU is recommended for faster processing
+- Minimum recommended VRAM: 12GB
 
 ## Troubleshooting
 
-1. **CUDA Issues**: Ensure you have a CUDA-compatible GPU and the correct CUDA version installed
-2. **Memory Issues**: Close other applications if you encounter out-of-memory errors
-3. **File Paths**: Use absolute paths for image and audio files
-4. **Dependencies**: If you encounter import errors, try reinstalling the specific package
+If you encounter issues during installation or usage, please check:
 
-## Notes
+1. Server logs for error messages
+2. Installed library versions
+3. Available disk space (models are very large)
+4. GPU VRAM availability (minimum 12GB recommended)
+5. PyTorch version compatibility (>= 2.7.0.dev required)
 
-- Make sure all file paths in your requests point to existing files
-- The server needs to be running before making API calls
-- Video processing may take some time depending on the complexity and your hardware
-- Monitor the job status endpoint to track progress
+## License
+
+[Add your license information here]
+
+## Contributing
+
+[Add contribution guidelines here]
+
+## Support
+
+For issues and questions, please open an issue on the project repository.
