@@ -146,7 +146,7 @@ wget -O marketing-video-ai/ComfyUI/models/loras/lightx2v_I2V_14B_480p_cfg_step_d
 ### Starting the Server
 
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 8000
+python run.py
 ```
 
 ### API Endpoints
