@@ -33,8 +33,7 @@ pip install mutagen
 
 ```bash
 pip uninstall -y torch torchvision torchaudio
-pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/test/cu124
-pip install torchvision torchaudio --no-deps --index-url https://download.pytorch.org/whl/test/cu124
+pip install torch==2.7.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/test/cu128
 ```
 
 ### 3. Install FFmpeg
