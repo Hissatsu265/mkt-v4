@@ -8,49 +8,49 @@ import subprocess
 
 def wait_for_audio_ready(file_path, min_size_mb=0.01, max_wait_time=60, check_interval=1, min_duration=0.1):
     """
-    Kiểm tra file audio đã sẵn sàng để sử dụng
+    Check if an audio file is ready for use.
     
     Args:
-        file_path: đường dẫn file audio cần kiểm tra
-        min_size_mb: kích thước tối thiểu của file (MB)
-        max_wait_time: thời gian chờ tối đa (giây)
-        check_interval: khoảng thời gian giữa các lần kiểm tra (giây)
-        min_duration: thời lượng audio tối thiểu (giây)
+        file_path: path to the audio file to check
+        min_size_mb: minimum file size (in MB)
+        max_wait_time: maximum waiting time (in seconds)
+        check_interval: interval between checks (in seconds)
+        min_duration: minimum duration of audio (in seconds)
     
     Returns:
-        bool: True nếu file sẵn sàng, False nếu timeout
+        bool: True if the file is ready, False if timeout
     """
-    print(f"🎵 Đang kiểm tra file audio: {file_path}")
+    print(f"🎵 Checking audio file: {file_path}")
     start_time = time.time()
     min_size_bytes = min_size_mb * 1024 * 1024
     last_size = 0
     stable_count = 0
     
     while time.time() - start_time < max_wait_time:
-        # Kiểm tra file có tồn tại không
+        # Check if file exists
         if not os.path.exists(file_path):
-            print(f"⏳ File chưa tồn tại. Chờ {check_interval}s...")
+            print(f"⏳ File not found yet. Waiting {check_interval}s...")
             time.sleep(check_interval)
             continue
         
         try:
-            # Kiểm tra kích thước file
+            # Check file size
             current_size = os.path.getsize(file_path)
-            print(f"📏 Kích thước file hiện tại: {current_size / (1024*1024):.2f} MB")
+            print(f"📏 Current file size: {current_size / (1024*1024):.2f} MB")
             
-            # Kiểm tra file có đủ kích thước tối thiểu không
+            # Check minimum size requirement
             if current_size < min_size_bytes:
-                print(f"⚠️ File chưa đủ kích thước tối thiểu ({min_size_mb} MB). Chờ...")
+                print(f"⚠️ File size below minimum ({min_size_mb} MB). Waiting...")
                 time.sleep(check_interval)
                 continue
             
-            # Kiểm tra file có đang được ghi không (kích thước ổn định)
+            # Check if file size is stable (not still being written)
             if current_size == last_size:
                 stable_count += 1
-                if stable_count >= 3:  # File ổn định trong 3 lần kiểm tra
-                    print("📊 File ổn định, tiến hành kiểm tra tính toàn vẹn audio...")
+                if stable_count >= 3:  # Stable for 3 consecutive checks
+                    print("📊 File size stable, validating audio integrity...")
                     
-                    # Kiểm tra file audio có thể đọc được không
+                    # Validate audio readability
                     if _validate_audio_file(file_path, min_duration):
                         return True
                     
@@ -58,61 +58,62 @@ def wait_for_audio_ready(file_path, min_size_mb=0.01, max_wait_time=60, check_in
             else:
                 stable_count = 0
                 last_size = current_size
-                print(f"🔄 File đang thay đổi kích thước...")
+                print(f"🔄 File size still changing...")
                 time.sleep(check_interval)
                 
         except Exception as e:
-            print(f"⚠️ Lỗi khi kiểm tra file: {e}")
+            print(f"⚠️ Error while checking file: {e}")
             time.sleep(check_interval)
     
-    print(f"❌ Timeout sau {max_wait_time}s")
+    print(f"❌ Timeout after {max_wait_time}s")
     return False
+
 
 def _validate_audio_file(file_path, min_duration=0.1):
     """
-    Kiểm tra tính hợp lệ của file audio bằng nhiều phương pháp
+    Validate the audio file using multiple methods.
     """
     file_ext = os.path.splitext(file_path)[1].lower()
     
-    # Phương pháp 1: Sử dụng librosa (tốt nhất cho hầu hết format)
+    # Method 1: Using librosa (best for most formats)
     try:
         duration = librosa.get_duration(path=file_path)
         if duration >= min_duration:
-            print(f"✅ File hợp lệ (librosa) - Thời lượng: {duration:.2f}s")
+            print(f"✅ Valid audio (librosa) - Duration: {duration:.2f}s")
             return True
         else:
-            print(f"⚠️ File quá ngắn: {duration:.2f}s < {min_duration}s")
+            print(f"⚠️ Audio too short: {duration:.2f}s < {min_duration}s")
     except Exception as e:
-        print(f"⚠️ Lỗi librosa: {e}")
+        print(f"⚠️ Librosa error: {e}")
     
-    # Phương pháp 2: Sử dụng soundfile
+    # Method 2: Using soundfile
     try:
         with sf.SoundFile(file_path) as f:
             frames = len(f)
             samplerate = f.samplerate
             duration = frames / samplerate
             if duration >= min_duration:
-                print(f"✅ File hợp lệ (soundfile) - Thời lượng: {duration:.2f}s, SR: {samplerate}Hz")
+                print(f"✅ Valid audio (soundfile) - Duration: {duration:.2f}s, SR: {samplerate}Hz")
                 return True
             else:
-                print(f"⚠️ File quá ngắn: {duration:.2f}s < {min_duration}s")
+                print(f"⚠️ Audio too short: {duration:.2f}s < {min_duration}s")
     except Exception as e:
-        print(f"⚠️ Lỗi soundfile: {e}")
+        print(f"⚠️ SoundFile error: {e}")
     
-    # Phương pháp 3: Sử dụng mutagen (tốt cho metadata)
+    # Method 3: Using mutagen (good for metadata)
     try:
         audio_file = File(file_path)
         if audio_file is not None and hasattr(audio_file, 'info'):
             duration = audio_file.info.length
             if duration >= min_duration:
-                print(f"✅ File hợp lệ (mutagen) - Thời lượng: {duration:.2f}s")
+                print(f"✅ Valid audio (mutagen) - Duration: {duration:.2f}s")
                 return True
             else:
-                print(f"⚠️ File quá ngắn: {duration:.2f}s < {min_duration}s")
+                print(f"⚠️ Audio too short: {duration:.2f}s < {min_duration}s")
     except Exception as e:
-        print(f"⚠️ Lỗi mutagen: {e}")
+        print(f"⚠️ Mutagen error: {e}")
     
-    # Phương pháp 4: Sử dụng wave (chỉ cho file WAV)
+    # Method 4: Using wave (for WAV files only)
     if file_ext == '.wav':
         try:
             with wave.open(file_path, 'rb') as wav_file:
@@ -120,14 +121,14 @@ def _validate_audio_file(file_path, min_duration=0.1):
                 sample_rate = wav_file.getframerate()
                 duration = frames / sample_rate
                 if duration >= min_duration:
-                    print(f"✅ File WAV hợp lệ - Thời lượng: {duration:.2f}s, SR: {sample_rate}Hz")
+                    print(f"✅ Valid WAV file - Duration: {duration:.2f}s, SR: {sample_rate}Hz")
                     return True
                 else:
-                    print(f"⚠️ File quá ngắn: {duration:.2f}s < {min_duration}s")
+                    print(f"⚠️ Audio too short: {duration:.2f}s < {min_duration}s")
         except Exception as e:
-            print(f"⚠️ Lỗi wave: {e}")
+            print(f"⚠️ Wave error: {e}")
     
-    # Phương pháp 5: Sử dụng ffprobe (yêu cầu ffmpeg)
+    # Method 5: Using ffprobe (requires ffmpeg)
     try:
         result = subprocess.run([
             'ffprobe', '-v', 'quiet', '-show_entries', 
@@ -138,101 +139,105 @@ def _validate_audio_file(file_path, min_duration=0.1):
         if result.returncode == 0:
             duration = float(result.stdout.strip())
             if duration >= min_duration:
-                print(f"✅ File hợp lệ (ffprobe) - Thời lượng: {duration:.2f}s")
+                print(f"✅ Valid audio (ffprobe) - Duration: {duration:.2f}s")
                 return True
             else:
-                print(f"⚠️ File quá ngắn: {duration:.2f}s < {min_duration}s")
+                print(f"⚠️ Audio too short: {duration:.2f}s < {min_duration}s")
     except Exception as e:
-        print(f"⚠️ Lỗi ffprobe: {e}")
+        print(f"⚠️ ffprobe error: {e}")
     
-    print("❌ Không thể xác thực file audio bằng bất kỳ phương pháp nào")
+    print("❌ Unable to validate audio file with any method")
     return False
 
-# ========== CÁCH SỬ DỤNG ĐƠN GIẢN ==========
+
+# ========== SIMPLE USAGE ==========
 
 def simple_audio_check(file_path):
     """
-    Kiểm tra file audio đơn giản - chỉ cần gọi 1 dòng
+    Simple one-line audio check.
     """
     return wait_for_audio_ready(file_path, min_size_mb=0.05, max_wait_time=30, min_duration=0.5)
 
 def quick_audio_check(file_path, timeout=15):
     """
-    Kiểm tra nhanh file audio với timeout ngắn
+    Quick audio check with short timeout.
     """
     return wait_for_audio_ready(file_path, min_size_mb=0.01, max_wait_time=timeout, min_duration=0.1)
 
-# ========== TEMPLATE ÁP DỤNG ==========
 
-# Template 1: Xử lý audio cơ bản
+# ========== TEMPLATE EXAMPLES ==========
+
+# Template 1: Basic audio processing
 def process_audio_with_check():
     input_file = "input_audio.wav"
     output_file = "output_audio.wav"
     
-    # Kiểm tra file input
+    # Check input file
     if not wait_for_audio_ready(input_file):
-        print("❌ File input không sẵn sàng")
+        print("❌ Input file not ready")
         return False
     
-    # Thực hiện xử lý audio của bạn ở đây
-    print("🎵 Đang xử lý audio...")
+    # Perform your audio processing here
+    print("🎵 Processing audio...")
     # your_audio_processing_code()
     
-    # Kiểm tra file output
+    # Check output file
     if wait_for_audio_ready(output_file, min_duration=1.0):
-        print("✅ Xử lý audio thành công!")
+        print("✅ Audio processing successful!")
         return True
     else:
-        print("❌ File output không được tạo hoặc không hợp lệ")
+        print("❌ Output file not created or invalid")
         return False
 
-# Template 2: Batch processing với kiểm tra
+
+# Template 2: Batch processing with validation
 def batch_audio_processing(input_files, output_dir):
     """
-    Xử lý nhiều file audio với kiểm tra
+    Process multiple audio files with validation.
     """
     results = []
     
     for input_file in input_files:
-        print(f"\n🎵 Xử lý: {input_file}")
+        print(f"\n🎵 Processing: {input_file}")
         
-        # Kiểm tra file input
+        # Check input file
         if not wait_for_audio_ready(input_file):
-            print(f"❌ Bỏ qua file: {input_file}")
-            results.append((input_file, False, "Input không sẵn sàng"))
+            print(f"❌ Skipping file: {input_file}")
+            results.append((input_file, False, "Input not ready"))
             continue
         
-        # Tạo tên file output
+        # Create output filename
         filename = os.path.basename(input_file)
         name, ext = os.path.splitext(filename)
         output_file = os.path.join(output_dir, f"{name}_processed{ext}")
         
-        # Thực hiện xử lý
+        # Perform processing
         try:
             # your_audio_processing_function(input_file, output_file)
             
-            # Kiểm tra output
+            # Validate output
             if wait_for_audio_ready(output_file, min_duration=0.5):
-                print(f"✅ Thành công: {output_file}")
+                print(f"✅ Success: {output_file}")
                 results.append((input_file, True, output_file))
             else:
-                print(f"❌ Lỗi output: {output_file}")
-                results.append((input_file, False, "Output không hợp lệ"))
+                print(f"❌ Invalid output: {output_file}")
+                results.append((input_file, False, "Invalid output"))
                 
         except Exception as e:
-            print(f"❌ Lỗi xử lý: {e}")
+            print(f"❌ Processing error: {e}")
             results.append((input_file, False, str(e)))
     
     return results
 
-# Template 3: Theo dõi quá trình render/export audio
+
+# Template 3: Monitor audio render/export progress
 def monitor_audio_export(output_path, expected_duration=None, timeout=120):
     """
-    Theo dõi quá trình export/render audio
+    Monitor the audio rendering/exporting process.
     """
-    print(f"🎵 Theo dõi export audio: {output_path}")
+    print(f"🎵 Monitoring audio export: {output_path}")
     
-    # Tăng thời gian chờ cho file lớn
+    # Adjust timeout for large files
     if expected_duration and expected_duration > 60:
         timeout = max(timeout, expected_duration * 2)
     
@@ -246,25 +251,25 @@ def monitor_audio_export(output_path, expected_duration=None, timeout=120):
     )
     
     if success:
-        print("🎉 Export audio hoàn tất!")
+        print("🎉 Audio export complete!")
         return True
     else:
-        print("💥 Export audio thất bại hoặc timeout!")
+        print("💥 Audio export failed or timed out!")
         return False
+
 
 # # ========== EXAMPLE USAGE ==========
 # if __name__ == "__main__":
-#     # Ví dụ sử dụng
 #     audio_file = "test_audio.wav"
     
-#     print("=== Test 1: Kiểm tra đơn giản ===")
+#     print("=== Test 1: Simple check ===")
 #     if simple_audio_check(audio_file):
 #         print("Ready to use!")
     
-#     print("\n=== Test 2: Kiểm tra nhanh ===")
+#     print("\n=== Test 2: Quick check ===")
 #     if quick_audio_check(audio_file):
 #         print("Quick check passed!")
     
-#     print("\n=== Test 3: Kiểm tra chi tiết ===")
+#     print("\n=== Test 3: Detailed check ===")
 #     if wait_for_audio_ready(audio_file, min_size_mb=0.1, max_wait_time=60, min_duration=2.0):
 #         print("Detailed check passed!")

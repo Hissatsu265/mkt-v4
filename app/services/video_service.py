@@ -14,13 +14,12 @@ import time
 from config import SERVER_COMFYUI,WORKFLOW_INFINITETALK_PATH,BASE_DIR
 from PIL import Image
 server_address = SERVER_COMFYUI
-
-from divide_audio import process_audio_file
-from merge_video import concat_videos
-from cut_video import cut_video,cut_audio,cut_audio_from_time
-from audio_duration import get_audio_duration
-from audio_processing_infinite import trim_video_start,add_silence_to_start
-from check_audio_safe import wait_for_audio_ready
+from utilities.divide_audio import process_audio_file
+from utilities.merge_video import concat_videos
+from utilities.cut_video import cut_video,cut_audio,cut_audio_from_time
+from utilities.audio_duration import get_audio_duration
+from utilities.audio_processing_infinite import trim_video_start,add_silence_to_start
+from utilities.check_audio_safe import wait_for_audio_ready
 # from paddvideo import add_green_background,replace_green_screen,crop_green_background,resize_and_pad
 # from app.services.create_video_infinitetalk import load_workflow,wait_for_completion,queue_prompt,find_latest_video
 import asyncio
@@ -114,7 +113,7 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
 
         concat_name=os.path.join(os.getcwd(), f"{job_id}_concat_{i}.mp4")
         output_file1 = concat_videos(results, concat_name)
-        from merge_video_audio import replace_audio_trimmed
+        from utilities.merge_video_audio import replace_audio_trimmed
         output_file = replace_audio_trimmed(output_file1,cond_audio_path,output_path_video)
 
         try:
@@ -145,7 +144,7 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
             job_id=job_id,
             resolution=resolution
         )  
-        from merge_video_audio import replace_audio_trimmed
+        from utilities.merge_video_audio import replace_audio_trimmed
         tempt=trim_video_start(generate_output_filename, duration=0.5)
         output_file = replace_audio_trimmed(generate_output_filename,cond_audio_path,output_path_video)
         try:

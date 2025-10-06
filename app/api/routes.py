@@ -488,7 +488,6 @@ async def create_video_effects(request: VideoEffectRequest):
 
 @router.get("/effects/{job_id}/status", response_model=EffectJobStatusResponse)
 async def get_effect_job_status(job_id: str):
-    """Lấy trạng thái effect job"""
     
     job_data = await job_service.get_effect_job_status(job_id)
     
@@ -498,7 +497,6 @@ async def get_effect_job_status(job_id: str):
             detail="Effect job not found"
         )
     
-    # Thêm thông tin workers nếu job đang pending
     if job_data["status"] == JobStatus.PENDING:
         workers_info = await job_service.get_effect_workers_info()
         job_data["queue_position"] = job_data.get("queue_position", 0)
@@ -508,7 +506,6 @@ async def get_effect_job_status(job_id: str):
 
 @router.get("/effects/{job_id}/download")
 async def download_effect_video(job_id: str):
-    """Download video đã xử lý hiệu ứng"""
     
     job_data = await job_service.get_effect_job_status(job_id)
     

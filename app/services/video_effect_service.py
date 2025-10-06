@@ -10,6 +10,17 @@ from animation.zoomin import safe_create_face_zoom_video
 from animation.safe_check import wait_for_file_ready
 import asyncio
 
+import shutil
+
+def rename_video(src_path, dst_path):
+    os.makedirs(os.path.dirname(dst_path), exist_ok=True)
+
+    if os.path.exists(dst_path):
+        os.remove(dst_path)
+
+    shutil.move(src_path, dst_path)
+
+    return dst_path
 def replace_audio(video1_path, video2_path):
 
     if not os.path.exists(video1_path):
@@ -79,11 +90,11 @@ class VideoEffectService:
                           transition_durations: List[float],
                           dolly_effects: List[DollyEffect] = None,
                           job_id: str = None) -> str:
-        video2 = self.apply_effects_sync(
+        # video2 = 
+        return self.apply_effects_sync(
             video_path, transition_times, transition_effects, 
             transition_durations, dolly_effects, job_id
         )
-        return replace_audio(video_path, video2)
 
     def apply_effects_sync(self, 
                           video_path: str,
@@ -210,8 +221,10 @@ class VideoEffectService:
         print(f"Dolly effects: {len(dolly_effects or [])} effects")
         print(f"Output will be: {output_path}")
         print("================================")
-        print(original_videopath)
-        return str(replace_audio(original_videopath, str(output_path)))
+        # print(original_videopath)
+        outputtttt= str(replace_audio(original_videopath, str(output_path)))
+        return str(rename_video(outputtttt, str(original_videopath)))
+
 
     def _mock_process_video_sync(self, input_path: str, output_path: str, job_id: str):
         import shutil
