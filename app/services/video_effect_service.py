@@ -12,17 +12,14 @@ import asyncio
 
 class VideoEffectService:
     def __init__(self):
-        pass  # Không cần khởi tạo gì đặc biệt
-
+        pass  
     def _ensure_dolly_objects(self, dolly_effects):
-        """Convert dict objects to DollyEffect objects if needed"""
         if not dolly_effects:
             return []
         
         result = []
         for dolly in dolly_effects:
             if isinstance(dolly, dict):
-                # Convert dict to DollyEffect object
                 dolly_obj = DollyEffect(
                     scene_index=dolly.get('scene_index'),
                     start_time=dolly.get('start_time', 0.0),
