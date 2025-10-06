@@ -35,7 +35,7 @@ pip install torch torchvision torchaudio --extra-index-url https://download.pyto
 ### Step 3: Install Required Libraries
 
 ```bash
-pip install -r requirements.txt
+
 pip install opencv-python sageattention
 pip install einops
 pip install pymongo
