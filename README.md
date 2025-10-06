@@ -69,7 +69,7 @@ bash install_custom_nodes.sh
 ## Start API Server
 
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 8000
+python run.py
 ```
 
 API will run at: `http://localhost:8000`
@@ -354,7 +354,7 @@ bash download_model.sh
 ### Port Already in Use
 ```bash
 # Change port number
-uvicorn main:app --host 0.0.0.0 --port 8001
+python run.py
 ```
 
 ---
