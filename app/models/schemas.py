@@ -14,6 +14,9 @@ class Resolution(str, Enum):
     VERTICAL_480 = "854x480"
     HORIZONTAL_720="720x1280"
     VERTICAL_720 = "1280x720"
+    RATIO_169 = "16:9"
+    RATIO_916 = "9:16"
+    RATIO_11 = "1:1"
 class JobStatus(str, Enum):
     PENDING = "pending"
     PROCESSING = "processing"

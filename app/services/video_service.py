@@ -43,15 +43,17 @@ class VideoService:
             from app.services.job_service import job_service
             await job_service.update_job_status(job_id, "processing", progress=99)
 
-            list_scene = await run_job(jobid, prompts, image_paths, audio_path, output_path,resolution,background)   
-            path_directus= Uploadfile_directus(str(output_path))
-            if path_directus is not None and output_path.exists() :
-                print(f"Video upload successfully: {path_directus}")
-                print(f"Job ID: {job_id}, Output Path: {path_directus}")
-                os.remove(str(output_path))
-                return str(path_directus),list_scene
-            else:
-                raise Exception("Cannot upload video to Directus or Video creation failed - output file not found")
+            list_scene = await run_job(jobid, prompts, image_paths, audio_path, output_path,resolution,background)  
+            print(output_path) 
+            return str(output_path),list_scene
+            # path_directus= Uploadfile_directus(str(output_path))
+            # if path_directus is not None and output_path.exists() :
+            #     print(f"Video upload successfully: {path_directus}")
+            #     print(f"Job ID: {job_id}, Output Path: {path_directus}")
+            #     os.remove(str(output_path))
+            #     return str(path_directus),list_scene
+            # else:
+            #     raise Exception("Cannot upload video to Directus or Video creation failed - output file not found")
     
         except Exception as e:
             if output_path.exists():
@@ -407,6 +409,12 @@ async def generate_video_cmd(prompt, cond_image, cond_audio_path, output_path, j
         elif resolution=="9:16":
             wf_w = 592
             wf_h = 1040
+        elif resolution=="1:1":
+            wf_w = 720
+            wf_h = 720
+        elif resolution=="720":
+            wf_w = 448
+            wf_h = 448
 
         workflow["245"]["inputs"]["value"] = wf_w
         workflow["246"]["inputs"]["value"] = wf_h
@@ -439,7 +447,7 @@ async def generate_video_cmd(prompt, cond_image, cond_audio_path, output_path, j
             await delete_file_async(str(video_path.replace("-audio.mp4",".mp4")))
             await delete_file_async(str(video_path.replace("-audio.mp4",".png")))
             file_size = os.path.getsize(video_path)
-            print(f"📏 Kích thước file: {file_size / (1024*1024):.2f} MB")
+            print(f"📏 File size: {file_size / (1024*1024):.2f} MB")
             wf_w = 720
             wf_h = 1280
             if resolution=="1280x720":    

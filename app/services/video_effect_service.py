@@ -2,7 +2,7 @@ import os
 import uuid
 from pathlib import Path
 from typing import List
-
+from moviepy.editor import VideoFileClip
 from app.models.schemas import TransitionEffect, DollyEffect, DollyEffectType, DollyEndType
 from animation.full_transition_effect import apply_effect
 from animation.zoomin_at_one_point import apply_zoom_effect
@@ -10,9 +10,42 @@ from animation.zoomin import safe_create_face_zoom_video
 from animation.safe_check import wait_for_file_ready
 import asyncio
 
+def replace_audio(video1_path, video2_path):
+
+    if not os.path.exists(video1_path):
+        raise FileNotFoundError(f"Video1 not found: {video1_path}")
+    if not os.path.exists(video2_path):
+        raise FileNotFoundError(f"Video2 not found: {video2_path}")
+
+    temp_output = "temp_output.mp4"
+
+    video1 = VideoFileClip(video1_path)
+    video2 = VideoFileClip(video2_path)
+
+    video2_with_new_audio = video2.set_audio(video1.audio)
+
+    video2_with_new_audio.write_videofile(
+        temp_output, codec="libx264", audio_codec="aac", verbose=False, logger=None
+    )
+
+    video1.close()
+    video2.close()
+    video2_with_new_audio.close()
+
+    os.remove(video2_path)
+    os.rename(temp_output, video2_path)
+
+    if os.path.exists(video1_path):
+        os.remove(video1_path)
+
+    print(f"✅ Replaced audio of {video2_path} with audio from {video1_path}")
+    return os.path.abspath(video2_path)
+
+
 class VideoEffectService:
     def __init__(self):
         pass  
+
     def _ensure_dolly_objects(self, dolly_effects):
         if not dolly_effects:
             return []
@@ -46,13 +79,11 @@ class VideoEffectService:
                           transition_durations: List[float],
                           dolly_effects: List[DollyEffect] = None,
                           job_id: str = None) -> str:
-        """
-        Áp dụng hiệu ứng cho video - ASYNC version (deprecated, use apply_effects_sync)
-        """
-        return self.apply_effects_sync(
+        video2 = self.apply_effects_sync(
             video_path, transition_times, transition_effects, 
             transition_durations, dolly_effects, job_id
         )
+        return replace_audio(video_path, video2)
 
     def apply_effects_sync(self, 
                           video_path: str,
@@ -64,14 +95,14 @@ class VideoEffectService:
         # Validate input
         if len(transition_times) != len(transition_effects) != len(transition_durations):
             raise ValueError("transition_times, transition_effects, transition_durations must have same length")
-        
+        original_videopath = video_path
         if not os.path.exists(video_path):
             raise FileNotFoundError(f"Input video not found: {video_path}")
         
         # Convert dict to DollyEffect objects if needed
         dolly_effects = self._ensure_dolly_objects(dolly_effects)
         
-        # Tạo output path
+        # Create output path
         from config import OUTPUT_DIR
         output_dir = Path(OUTPUT_DIR)
         output_dir.mkdir(exist_ok=True)
@@ -79,18 +110,19 @@ class VideoEffectService:
         output_filename = f"effect_{job_id or uuid.uuid4().hex}.mp4"
         output_path = output_dir / output_filename
         
-        # === TỰ XỬ LÝ HIỆU ỨNG TẠI ĐÂY ===
-        # Bạn có thể truy cập tất cả thông tin:
-        # - video_path: đường dẫn video gốc
-        # - transition_times: [1.5, 3.0, 5.2, ...] - thời điểm chuyển cảnh
-        # - transition_effects: [TransitionEffect.FADE, TransitionEffect.ZOOM_IN, ...] - loại hiệu ứng
-        # - transition_durations: [0.5, 1.0, 0.8, ...] - thời gian hiệu ứng
-        # - dolly_effects: list các DollyEffect object với thông tin chi tiết
-        # - job_id: ID của job để track progress
+        # === APPLY EFFECTS HERE ===
+        # You can access:
+        # - video_path: original video path
+        # - transition_times: [1.5, 3.0, 5.2, ...] - transition points
+        # - transition_effects: [TransitionEffect.FADE, TransitionEffect.ZOOM_IN, ...] - effect types
+        # - transition_durations: [0.5, 1.0, 0.8, ...] - duration of effects
+        # - dolly_effects: list of DollyEffect objects with details
+        # - job_id: ID to track progress
         # =======================Transition================================
         for i in range(len(transition_times)):
             
-            if i>0: video_path = str(output_path)  
+            if i > 0: 
+                video_path = str(output_path)  
             start_time = transition_times[i] - transition_durations[i] / 2
             end_time = transition_times[i] + transition_durations[i] / 2
             effect_name = transition_effects[i]
@@ -105,37 +137,42 @@ class VideoEffectService:
             print(f"Output saved to {output_path}")
             print("================================")
         # =======================Dolly================================
-        k=0
+        k = 0
         print("Dolly effects processing is currently disabled in the code.")
         print(f"Received {len(dolly_effects)} dolly effects:")
-        # print(dolly_effects)
         wait_for_file_ready(video_path)
         for i, dolly in enumerate(dolly_effects):
-            # if i>0:
-            outputpath_raw_eff=output_dir / f"raw_effect_{job_id or uuid.uuid4().hex}_step{i+1}.mp4"
+            outputpath_raw_eff = output_dir / f"raw_effect_{job_id or uuid.uuid4().hex}_step{i+1}.mp4"
             video_path = str(output_path)
             print(f"  Effect {i+1}: type={dolly.effect_type}, start={dolly.start_time}s, duration={dolly.duration}s")
+            time_begin = 0
+            for j in range(dolly.scene_index or 0):
+                print(f"    Scene index {j+1}")
+                time_begin += transition_times[j]
+            print("Time begin:", time_begin)
             if dolly.effect_type == DollyEffectType.MANUAL_ZOOM:
                 wait_for_file_ready(video_path)
                 print(f"    Manual zoom at ({dolly.x_coordinate}, {dolly.y_coordinate}) with zoom percent {dolly.zoom_percent}%")
+                print("Start time:", time_begin + dolly.start_time)
+                print(dolly.end_time)
                 apply_zoom_effect(
                     input_path=video_path,
                     output_path=str(outputpath_raw_eff),
                     zoom_duration=dolly.duration,
-                    zoom_start_time=dolly.start_time,
-                    zoom_percent=dolly.zoom_percent / 100.0,  # Chuyển đổi sang tỷ lệ
-                    center=(dolly.x_coordinate, dolly.y_coordinate),  # Giả sử tọa độ trong khoảng [0, 1]
-                    end_effect=dolly.end_time,  # Kết thúc tại thời gian đã chỉ định
-                    remove_mode=dolly.end_type.value  # "smooth" hoặc "instant"
+                    zoom_start_time=time_begin + dolly.start_time,
+                    zoom_percent=dolly.zoom_percent / 100.0,  # Convert to ratio
+                    center=(dolly.x_coordinate, dolly.y_coordinate),  # Coordinates assumed in [0, 1]
+                    end_effect=time_begin + dolly.end_time,  
+                    remove_mode=dolly.end_type.value  # "smooth" or "instant"
                 )   
-            elif dolly.effect_type == DollyEffectType.AUTO_ZOOM and dolly.end_type.value=="instant":
+            elif dolly.effect_type == DollyEffectType.AUTO_ZOOM and dolly.end_type.value == "instant":
                 print(f"    Auto zoom with zoom percent {dolly.zoom_percent}%")
                 safe_create_face_zoom_video(
                     input_video=video_path,
                     output_video=str(outputpath_raw_eff),
                     zoom_type="instant",
-                    zoom_start_time=dolly.start_time,
-                    zoom_duration=dolly.end_time-   dolly.start_time,
+                    zoom_start_time=time_begin + dolly.start_time,
+                    zoom_duration=dolly.end_time - dolly.start_time,
                     zoom_factor=2 - dolly.zoom_percent / 100.0,
                     enable_shake=False,
                     shake_intensity=1,
@@ -143,13 +180,14 @@ class VideoEffectService:
                 )
             elif dolly.effect_type == DollyEffectType.AUTO_ZOOM:
                 print(f"    Auto zoom with zoom percent {dolly.zoom_percent}%")
+                print("afdfs", dolly.start_time + dolly.duration)
+                print("afdfs", dolly.end_time - dolly.start_time)
                 safe_create_face_zoom_video(
                     input_video=video_path,
                     output_video=str(outputpath_raw_eff),
                     zoom_type="gradual",
-                    gradual_start_time=dolly.start_time,
-                    gradual_end_time=dolly.start_time+dolly.duration,
-                    # zoom_start_time=dolly.start_time,
+                    gradual_start_time=time_begin + dolly.start_time,
+                    gradual_end_time=dolly.start_time + dolly.duration,
                     hold_duration=dolly.end_time - dolly.start_time,
                     zoom_factor=2 - dolly.zoom_percent / 100.0,
                     enable_shake=False,
@@ -158,92 +196,12 @@ class VideoEffectService:
                 ) 
             if os.path.exists(output_path):
                 os.remove(output_path)
-                print(f"Đã xóa file: {output_path}")
+                print(f"Deleted file: {output_path}")
             else:
-                print("File không tồn tại")
+                print("File does not exist")
             os.rename(outputpath_raw_eff, output_path)
-    
-            # elif dolly.effect_type == DollyEffectType.DOUBLE_ZOOM:
-            #     print(f"    Double zoom with zoom percent {dolly.zoom_percent}%")
-            #     create_face_zoom_video(
-            #         input_video=video_path,
-            #         output_video=str(output_path),
-            #         zoom_type="instant",
-            #         zoom_start_time=dolly.start_time,
-            #         zoom_duration=dolly.end_time - dolly.start_time,
-            #         zoom_factor=1.3,
-            #         enable_shake=False,
-            #         shake_intensity=2,
-            #         shake_start_delay=0.5
-            #     )
-            #     create_face_zoom_video(
-            #         input_video=video_path,
-            #         output_video=str(output_path),
-            #         zoom_type="instant",
-            #         zoom_start_time=dolly.start_time+1.0,
-            #         zoom_duration=dolly.end_time-   dolly.start_time - 1.0,
-            #         zoom_factor=1.3,
-            #         enable_shake=False,
-            #         shake_intensity=2,
-            #         shake_start_delay=0.5
-            #     )
-
-
-
             print("================================")
-        # for dolly in dolly_effects or []:
-        #     if k!=0:
-        #         video_path = str(output_path)
-        #     # if dolly.scene_index is not None:
-        #     if dolly.effect_type == DollyEffectType.MANUAL_ZOOM:
-        #         # if dolly.start_time is None:
-        #         #     dolly.start_time = transition_times[0] if transition_times else 0
-        #         apply_zoom_effect(
-        #             input_path=video_path,
-        #             output_path=str(output_path),
-        #             zoom_duration=dolly.duration,
-        #             zoom_start_time=dolly.start_time,
-        #             zoom_percent=dolly.zoom_percent / 100.0,  # Chuyển đổi sang tỷ lệ
-        #             center=(dolly.x_coordinate, dolly.y_coordinate),  # Giả sử tọa độ trong khoảng [0, 1]
-        #             end_effect=dolly.end_time,  # Kết thúc tại thời gian đã chỉ định
-        #             remove_mode=dolly.end_type.value  # "smooth" hoặc "instant"
-        #         )   
-        #     elif dolly.effect_type == DollyEffectType.AUTO_ZOOM:
-        #         create_face_zoom_video(
-        #             input_video=video_path,
-        #             output_video=str(output_path),
-        #             zoom_type="instant",
-        #             zoom_start_time=dolly.start_time,
-        #             zoom_duration=dolly.duration,
-        #             zoom_factor=1.3,
-        #             enable_shake=False,
-        #             shake_intensity=1,
-        #             shake_start_delay=0.3
-        #         )
-        #     elif dolly.effect_type == DollyEffectType.DOUBLE_ZOOM:
-        #         create_face_zoom_video(
-        #             input_video=video_path,
-        #             output_video=str(output_path),
-        #             zoom_type="smooth",
-        #             zoom_start_time=dolly.start_time,
-        #             zoom_duration=dolly.duration,
-        #             zoom_factor=1.6,
-        #             enable_shake=True,
-        #             shake_intensity=2,
-        #             shake_start_delay=0.5
-        #         )
-        #         create_face_zoom_video(
-        #             input_video=video_path,
-        #             output_video=str(output_path),
-        #             zoom_type="instant",
-        #             zoom_start_time=dolly.start_time+1.0,
-        #             zoom_duration=dolly.duration-1.0,
-        #             zoom_factor=1.3,
-        #             enable_shake=False,
-        #             shake_intensity=1,
-        #             shake_start_delay=0.3
-        #         )
-        #     k+=1
+
         print(f"Processing video effects for job {job_id}")
         print(f"Input video: {video_path}")
         print(f"Transition times: {transition_times}")
@@ -251,31 +209,23 @@ class VideoEffectService:
         print(f"Transition durations: {transition_durations}")
         print(f"Dolly effects: {len(dolly_effects or [])} effects")
         print(f"Output will be: {output_path}")
-        # import time
-        # time.sleep(7)
         print("================================")
-        # =======================Test================================
-        # self._mock_process_video_sync(video_path, str(output_path), job_id)
-        
-        return str(output_path)
+        print(original_videopath)
+        return str(replace_audio(original_videopath, str(output_path)))
 
     def _mock_process_video_sync(self, input_path: str, output_path: str, job_id: str):
-  
         import shutil
         import time
-        
-        time.sleep(2)  # 2 giây để test
-        
+        time.sleep(2)  # 2 seconds for testing
         shutil.copy2(input_path, output_path)
         print(f"Mock processing completed for job {job_id}")
 
     def get_video_duration_sync(self, video_path: str) -> float:
         """
-        Lấy duration của video - SYNC version để chạy trong thread pool
+        Get video duration - synchronous version for thread pool
         """
-        
-        # TODO: Implement lấy duration thật với subprocess.run()
-        # Ví dụ:
+        # TODO: Implement actual duration retrieval with subprocess.run()
+        # Example:
         # import subprocess
         # result = subprocess.run([
         #     "ffprobe", "-v", "quiet", "-show_entries", "format=duration",
@@ -285,16 +235,15 @@ class VideoEffectService:
         #     raise RuntimeError(f"FFprobe failed: {result.stderr}")
         # return float(result.stdout.strip())
         
-        # Mock duration cho test
-        return 60.0  # 60 giây
+        # Mock duration for testing
+        return 60.0  # 60 seconds
 
     async def get_video_duration(self, video_path: str) -> float:
         """
-        Lấy duration của video - sử dụng subprocess để không block
+        Get video duration asynchronously using subprocess
         """
-        
-        # TODO: Implement lấy duration thật với subprocess
-        # Ví dụ:
+        # TODO: Implement actual duration retrieval with subprocess
+        # Example:
         # process = await asyncio.create_subprocess_exec(
         #     "ffprobe", "-v", "quiet", "-show_entries", "format=duration", 
         #     "-of", "csv=p=0", video_path,
@@ -304,8 +253,8 @@ class VideoEffectService:
         # stdout, stderr = await process.communicate()
         # return float(stdout.decode('utf-8').strip())
         
-        # Mock duration cho test
-        return 60.0  # 60 giây
+        # Mock duration for testing
+        return 60.0  # 60 seconds
 
     def validate_effects_timing(self, 
                               transition_times: List[float],
@@ -314,12 +263,12 @@ class VideoEffectService:
         # Convert dict to DollyEffect objects if needed
         dolly_effects = self._ensure_dolly_objects(dolly_effects)
         
-        # Kiểm tra transition times
+        # Check transition times
         for time_point in transition_times:
             if time_point > video_duration:
                 raise ValueError(f"Transition time {time_point}s exceeds video duration {video_duration}s")
         
-        # Kiểm tra dolly effects
+        # Check dolly effects
         for dolly in dolly_effects or []:
             if dolly.start_time + dolly.duration > video_duration:
                 raise ValueError(f"Dolly effect (start: {dolly.start_time}s, duration: {dolly.duration}s) exceeds video duration {video_duration}s")
