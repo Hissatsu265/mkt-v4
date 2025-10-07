@@ -2,7 +2,10 @@ import cv2
 import numpy as np
 from moviepy.editor import VideoFileClip
 import math
+import os
 
+import shutil
+import subprocess
 # ========================
 # Các hiệu ứng video frame
 # ========================
@@ -754,19 +757,232 @@ def effect_honeycomb(frame, progress, hex_size=30):
 # ===================================
 # Hàm xử lý chính với MoviePy + OpenCV
 # ===================================
-def apply_effect(video_path, output_path, start_time, end_time, effect_name, **kwargs):
+def apply_multiple_effects(video_path, output_path, effects_list, quality="high"):
+    """
+    Áp dụng nhiều hiệu ứng trong 1 lần xử lý - Không mất chất lượng
+    
+    Parameters:
+    - video_path: Đường dẫn video input
+    - output_path: Đường dẫn video output
+    - effects_list: List các hiệu ứng dạng:
+        [
+            {
+                'start_time': 0,
+                'end_time': 2,
+                'effect': 'fade_in',
+                'params': {}  # Optional
+            },
+            {
+                'start_time': 2,
+                'end_time': 4,
+                'effect': 'rgb_split',
+                'params': {'max_offset': 30}
+            },
+            ...
+        ]
+    - quality: "high", "medium", "low"
+    """
+    
+    # Mở video
+    cap = cv2.VideoCapture(video_path)
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    
+    print(f"Video info: {w}x{h} @ {fps} fps, {total_frames} frames")
+    print(f"Sẽ áp dụng {len(effects_list)} hiệu ứng trong 1 lần xử lý")
+    
+    for effect_info in effects_list:
+        effect_info['start_frame'] = int(effect_info['start_time'] * fps)
+        effect_info['end_frame'] = int(effect_info['end_time'] * fps)
+    
+    import uuid
+    temp_output = f"temp_processed_{uuid.uuid4().hex}.mp4"
+
+    
+    crf_map = {"high": "18", "medium": "23", "low": "28"}
+    crf = crf_map.get(quality, "18")
+    
+    ffmpeg_cmd = [
+        'ffmpeg',
+        '-y',
+        '-f', 'rawvideo',
+        '-vcodec', 'rawvideo',
+        '-s', f'{w}x{h}',
+        '-pix_fmt', 'bgr24',
+        '-r', str(fps),
+        '-i', '-',
+        '-c:v', 'libx264',
+        '-preset', 'slow',
+        '-crf', crf,
+        '-pix_fmt', 'yuv420p',
+        temp_output
+    ]
+    
+    try:
+        process = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE, 
+                                   stderr=subprocess.PIPE)
+    except FileNotFoundError:
+        print("❌ FFmpeg không tìm thấy! Cài đặt FFmpeg:")
+        print("   Ubuntu/Debian: sudo apt install ffmpeg")
+        print("   MacOS: brew install ffmpeg")
+        print("   Windows: Tải từ https://ffmpeg.org/download.html")
+        return False
+    
+    frame_idx = 0
+    prev_frame = None
+    
+    print("\n🎬 Bắt đầu xử lý video...")
+    
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        # Kiểm tra frame này có hiệu ứng nào không
+        for effect_info in effects_list:
+            start_f = effect_info['start_frame']
+            end_f = effect_info['end_frame']
+            
+            if start_f <= frame_idx <= end_f:
+                progress = (frame_idx - start_f) / (end_f - start_f) if end_f > start_f else 0
+                effect_name = effect_info['effect']
+                params = effect_info.get('params', {})
+                
+                if effect_name == "slide":
+                    frame = effect_slide(frame, progress, params.get("direction", "horizontal"))
+                elif effect_name == "rotate":
+                    frame = effect_rotate(frame, progress, params.get("max_angle", 180))
+                elif effect_name == "circle_mask":
+                    frame = effect_circle_mask(frame, progress)
+                elif effect_name == "fade_in":
+                    frame = effect_fade_in(frame, progress)
+                elif effect_name == "fade_out":
+                    frame = effect_fade_out(frame, progress)
+                elif effect_name == "fadeout_fadein":
+                    frame = effect_fadeout_fadein(frame, progress)
+                elif effect_name == "crossfade" and prev_frame is not None:
+                    frame = effect_crossfade(prev_frame, frame, progress)
+                elif effect_name == "rgb_split":
+                    frame = effect_rgb_split(frame, progress, params.get("max_offset", 20))
+                elif effect_name == "flip_horizontal":
+                    frame = effect_flip_horizontal(frame, progress)
+                elif effect_name == "flip_vertical":
+                    frame = effect_flip_vertical(frame, progress)
+                elif effect_name == "push_blur":
+                    frame = effect_push_blur(frame, progress, params.get("direction", "left"))
+                elif effect_name == "squeeze_horizontal":
+                    frame = effect_squeeze_horizontal(frame, progress)
+                elif effect_name == "wave_distortion":
+                    frame = effect_wave_distortion(frame, progress, params.get("amplitude", 20))
+                elif effect_name == "pixelate":
+                    frame = effect_pixelate(frame, progress,
+                                        params.get("min_pixel_size", 2),
+                                        params.get("max_pixel_size", 50))
+                elif effect_name == "shatter":
+                    frame = effect_shatter(frame, progress, params.get("num_pieces", 20))
+                elif effect_name == "kaleidoscope":
+                    frame = effect_kaleidoscope(frame, progress, params.get("segments", 8))
+                elif effect_name == "page_turn":
+                    frame = effect_page_turn(frame, progress, params.get("direction", "right"))
+                elif effect_name == "television":
+                    frame = effect_television(frame, progress)
+                elif effect_name == "film_burn":
+                    frame = effect_film_burn(frame, progress, params.get("intensity", 50))
+                elif effect_name == "matrix_rain":
+                    frame = effect_matrix_rain(frame, progress, params.get("density", 0.1))
+                elif effect_name == "old_film":
+                    frame = effect_old_film(frame, progress)
+                elif effect_name == "mosaic_blur":
+                    frame = effect_mosaic_blur(frame, progress, params.get("tile_size", 20))
+                elif effect_name == "lens_flare":
+                    frame = effect_lens_flare(frame, progress, params.get("intensity", 100))
+                elif effect_name == "digital_glitch":
+                    frame = effect_digital_glitch(frame, progress, params.get("max_blocks", 20))
+                elif effect_name == "waterfall":
+                    frame = effect_waterfall(frame, progress, params.get("direction", "down"))
+                elif effect_name == "honeycomb":
+                    frame = effect_honeycomb(frame, progress, params.get("hex_size", 30))
+                else:
+                    pass
+        try:
+            process.stdin.write(frame.tobytes())
+        except BrokenPipeError:
+            print("❌ FFmpeg pipe be closed!")
+            break
+        
+        prev_frame = frame.copy()
+        frame_idx += 1
+        
+        # Progress bar
+        if frame_idx % 30 == 0 or frame_idx == total_frames:
+            percent = (frame_idx / total_frames) * 100
+            print(f"Progress: {frame_idx}/{total_frames} frames ({percent:.1f}%)", end='\r')
+    
+    cap.release()
+    process.stdin.close()
+    process.wait()
+    
+    if process.returncode != 0:
+        stderr = process.stderr.read().decode()
+        print(f"\n❌ FFmpeg error: {stderr}")
+        return False
+    
+    print(f"\n✓ Video đã encode: {temp_output}")
+    
+    print("Đang thêm audio...")
+    audio_cmd = [
+        'ffmpeg',
+        '-y',
+        '-i', temp_output,
+        '-i', video_path,
+        '-c:v', 'copy',  
+        '-c:a', 'aac',
+        '-b:a', '320k',
+        '-map', '0:v:0',
+        '-map', '1:a:0?',  
+        output_path
+    ]
+    
+    result = subprocess.run(audio_cmd, capture_output=True)
+    
+    if result.returncode != 0:
+        print(f"⚠ Lỗi thêm audio: {result.stderr.decode()}")
+        print("Đang copy video không có audio...")
+        import shutil
+        shutil.copy(temp_output, output_path)
+    else:
+        print("✓ Đã thêm audio")
+    
+    if os.path.exists(temp_output):
+        os.remove(temp_output)
+        print("✓ Đã xóa file tạm")
+    
+    print(f"\n✅ HOÀN THÀNH! Video: {output_path}")
+    print(f"   Chất lượng: {quality} (CRF={crf})")
+    return True
+
+
+def apply_effect1(video_path, output_path, start_time, end_time, effect_name, **kwargs):
     cap = cv2.VideoCapture(video_path)
     fps = cap.get(cv2.CAP_PROP_FPS)
     w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     start_frame = int(start_time * fps)
     end_frame = int(end_time * fps)
+    # temp_video = "temp_no_audio_raw.avi"
+    import uuid
 
-    temp_video = "temp_no_audio.mp4"
-    out = cv2.VideoWriter(temp_video, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
+    temp_video = f"temp_no_audio_raw_{uuid.uuid4().hex}.avi"
+    # temp_video = "temp_no_audio.mp4"
+    fourcc = cv2.VideoWriter_fourcc(*'FFV1')
+    out = cv2.VideoWriter(temp_video, fourcc, fps, (w, h))
 
     frame_idx = 0
     prev_frame = None
+
+    print(f"Processing frames {start_frame} to {end_frame}...")
 
     while True:
         ret, frame = cap.read()
@@ -775,6 +991,8 @@ def apply_effect(video_path, output_path, start_time, end_time, effect_name, **k
 
         if start_frame <= frame_idx <= end_frame:
             progress = (frame_idx - start_frame) / (end_frame - start_frame)
+            
+            # Apply effects (giữ nguyên logic này)
             if effect_name == "slide":
                 frame = effect_slide(frame, progress, kwargs.get("direction", "horizontal"))
             elif effect_name == "rotate":
@@ -801,10 +1019,6 @@ def apply_effect(video_path, output_path, start_time, end_time, effect_name, **k
                 frame = effect_squeeze_horizontal(frame, progress)
             elif effect_name == "wave_distortion":
                 frame = effect_wave_distortion(frame, progress, kwargs.get("amplitude", 20))
-            elif effect_name == "zoom_blur":
-                frame = effect_zoom_blur(frame, progress, kwargs.get("max_zoom", 1.5))
-            elif effect_name == "spiral":
-                frame = effect_spiral(frame, progress)
             elif effect_name == "pixelate":
                 frame = effect_pixelate(frame, progress,
                                       kwargs.get("min_pixel_size", 2),
@@ -843,16 +1057,61 @@ def apply_effect(video_path, output_path, start_time, end_time, effect_name, **k
     cap.release()
     out.release()
 
+    print("Frame processing complete. Converting to H.264...")
+
+    # cap.release()
+    # out.release()
+
     try:
         original_clip = VideoFileClip(video_path)
         processed_clip = VideoFileClip(temp_video).set_audio(original_clip.audio)
-        processed_clip.write_videofile(output_path, codec="libx264", audio_codec="aac")
+        
+        # ✅ THÊM THAM SỐ CHẤT LƯỢNG CAO
+        processed_clip.write_videofile(
+            output_path, 
+            codec="libx264",
+            audio_codec="aac",
+            bitrate="12000k",           # 12 Mbps video
+            audio_bitrate="320k",       # 320 kbps audio
+            preset="medium",            # Balance speed/quality
+            ffmpeg_params=[
+                "-crf", "17",           # CRF 17 = excellent quality
+                "-pix_fmt", "yuv420p"   # Compatibility
+            ],
+            threads=4,                  # Multi-threading
+            verbose=False,
+            logger=None
+        )
 
         original_clip.close()
         processed_clip.close()
+        
+        # Cleanup temp file
+        if os.path.exists(temp_video):
+            os.remove(temp_video)
+            print(f"✅ Removed temp file: {temp_video}")
+            
     except Exception as e:
-        print(f"Error processing audio: {e}")
-        # Nếu có lỗi với audio, chỉ copy video
-        import shutil
-        shutil.move(temp_video, output_path)
+        print(f"❌ Error processing audio: {e}")
+        # Fallback: convert without audio
+        try:
+            processed_clip = VideoFileClip(temp_video)
+            processed_clip.write_videofile(
+                output_path,
+                codec="libx264",
+                bitrate="12000k",
+                preset="medium",
+                ffmpeg_params=["-crf", "17", "-pix_fmt", "yuv420p"],
+                threads=4
+            )
+            processed_clip.close()
+            
+            if os.path.exists(temp_video):
+                os.remove(temp_video)
+        except Exception as e2:
+            print(f"❌ Critical error: {e2}")
+            import shutil
+            shutil.move(temp_video, output_path)
+
+    print(f"✅ Effect applied successfully: {output_path}")
 

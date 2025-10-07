@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 from PIL import Image
 import os
-import mediapipe as mp
+# import mediapipe as mp
 import random
 import math
 import time
@@ -139,7 +139,7 @@ class VideoFaceZoom:
     def __init__(self, input_video_path, output_video_path):
         self.input_path = input_video_path
         self.output_path = output_video_path
-
+        self.temp_output = output_video_path.replace('.mp4', '_temp_raw.avi')
         self.mp_face_detection = mp.solutions.face_detection
         self.mp_drawing = mp.solutions.drawing_utils
         self.face_detection = self.mp_face_detection.FaceDetection(
@@ -155,13 +155,54 @@ class VideoFaceZoom:
         self.height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        self.out = cv2.VideoWriter(output_video_path, fourcc, self.fps, (self.width, self.height))
+        # fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        # self.out = cv2.VideoWriter(output_video_path, fourcc, self.fps, (self.width, self.height))
+
+        # if not self.out.isOpened():
+        #     self.cap.release()
+        #     raise ValueError(f"Cannot create video writer: {output_video_path}")
+        fourcc = cv2.VideoWriter_fourcc(*'FFV1')  # Lossless codec
+        self.out = cv2.VideoWriter(self.temp_output, fourcc, self.fps, (self.width, self.height))
 
         if not self.out.isOpened():
             self.cap.release()
-            raise ValueError(f"Cannot create video writer: {output_video_path}")
+            raise ValueError(f"Cannot create video writer: {self.temp_output}")
 
+    def _convert_to_h264(self):
+        """Convert raw video to H.264 with high quality"""
+        print(f"🔄 Converting to H.264: {self.temp_output} -> {self.output_path}")
+        
+        try:
+            # Load video gốc để lấy audio
+            original_clip = VideoFileClip(self.input_path)
+            temp_clip = VideoFileClip(self.temp_output)
+            
+            # Giữ audio từ video gốc
+            final_clip = temp_clip.set_audio(original_clip.audio)
+            
+            # Export với chất lượng cao
+            final_clip.write_videofile(
+                self.output_path,
+                codec="libx264",
+                bitrate="10000k",
+                audio_bitrate="320k",
+                preset="medium",
+                ffmpeg_params=["-crf", "18"],
+                threads=4,
+                verbose=False,
+                logger=None
+            )
+            
+            original_clip.close()
+            temp_clip.close()
+            final_clip.close()
+            
+            os.remove(self.temp_output)
+            print(f"✅ Converted successfully: {self.output_path}")
+            
+        except Exception as e:
+            print(f"❌ Error during H.264 conversion: {e}")
+            raise
     def __enter__(self):
         return self
 
@@ -175,6 +216,8 @@ class VideoFaceZoom:
         if hasattr(self, 'out') and self.out.isOpened():
             self.out.release()
         print(f"✅ Resources released for: {self.output_path}")
+        if os.path.exists(self.temp_output):
+            self._convert_to_h264()
 
     # Face detection & zoom logic unchanged
     def detect_faces(self, frame):

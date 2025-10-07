@@ -4,14 +4,16 @@ from pathlib import Path
 from typing import List
 from moviepy.editor import VideoFileClip
 from app.models.schemas import TransitionEffect, DollyEffect, DollyEffectType, DollyEndType
-from animation.full_transition_effect import apply_effect
-from animation.zoomin_at_one_point import apply_zoom_effect
+from animation.full_transition_effect import  apply_multiple_effects
+from animation.zoomin_at_one_point import apply_zoom_effect_fast
 from animation.zoomin import safe_create_face_zoom_video
 from animation.safe_check import wait_for_file_ready
 import asyncio
+import numpy as np
 
 import shutil
-
+import math
+import subprocess
 def rename_video(src_path, dst_path):
     os.makedirs(os.path.dirname(dst_path), exist_ok=True)
 
@@ -22,7 +24,6 @@ def rename_video(src_path, dst_path):
 
     return dst_path
 def replace_audio(video1_path, video2_path):
-
     if not os.path.exists(video1_path):
         raise FileNotFoundError(f"Video1 not found: {video1_path}")
     if not os.path.exists(video2_path):
@@ -36,7 +37,15 @@ def replace_audio(video1_path, video2_path):
     video2_with_new_audio = video2.set_audio(video1.audio)
 
     video2_with_new_audio.write_videofile(
-        temp_output, codec="libx264", audio_codec="aac", verbose=False, logger=None
+        temp_output, 
+        codec="libx264",
+        audio_codec="aac",
+        bitrate="8000k",  # Bitrate video cao (điều chỉnh theo nhu cầu)
+        audio_bitrate="320k",  # Bitrate audio cao
+        preset="slow",  # slower = better quality
+        ffmpeg_params=["-crf", "18"],  # CRF thấp = chất lượng cao (0-51, 18 là rất tốt)
+        verbose=False, 
+        logger=None
     )
 
     video1.close()
@@ -130,23 +139,37 @@ class VideoEffectService:
         # - dolly_effects: list of DollyEffect objects with details
         # - job_id: ID to track progress
         # =======================Transition================================
+        complex_effects=[]
         for i in range(len(transition_times)):
-            
             if i > 0: 
                 video_path = str(output_path)  
             start_time = transition_times[i] - transition_durations[i] / 2
             end_time = transition_times[i] + transition_durations[i] / 2
             effect_name = transition_effects[i]
-            apply_effect(
-                video_path=video_path,
-                output_path=str(output_path),
-                start_time=start_time,
-                end_time=end_time,
-                effect_name=effect_name
-            )
-            print(f"Applied effect {effect_name} from {start_time}s to {end_time}s on video {video_path}")
-            print(f"Output saved to {output_path}")
+            complex_effects.append({
+                "start_time": start_time,
+                "end_time": end_time,
+                "effect": effect_name
+            })
+            # apply_multiple_effects
+            # apply_effect(
+            #     video_path=video_path,
+            #     output_path=str(output_path),
+            #     start_time=start_time,
+            #     end_time=end_time,
+            #     effect_name=effect_name
+            # )
+
+            # print(f"Applied effect {effect_name} from {start_time}s to {end_time}s on video {video_path}")
+            # print(f"Output saved to {output_path}")
             print("================================")
+        apply_multiple_effects(
+            video_path=original_videopath,
+            output_path=str(output_path),
+            effects_list=complex_effects,
+            quality="high"
+        )
+    
         # =======================Dolly================================
         k = 0
         print("Dolly effects processing is currently disabled in the code.")
@@ -166,7 +189,7 @@ class VideoEffectService:
                 print(f"    Manual zoom at ({dolly.x_coordinate}, {dolly.y_coordinate}) with zoom percent {dolly.zoom_percent}%")
                 print("Start time:", time_begin + dolly.start_time)
                 print(dolly.end_time)
-                apply_zoom_effect(
+                apply_zoom_effect_fast(
                     input_path=video_path,
                     output_path=str(outputpath_raw_eff),
                     zoom_duration=dolly.duration,
@@ -174,7 +197,8 @@ class VideoEffectService:
                     zoom_percent=dolly.zoom_percent / 100.0,  # Convert to ratio
                     center=(dolly.x_coordinate, dolly.y_coordinate),  # Coordinates assumed in [0, 1]
                     end_effect=time_begin + dolly.end_time,  
-                    remove_mode=dolly.end_type.value  # "smooth" or "instant"
+                    remove_mode=dolly.end_type.value,
+                    crf=18   # "smooth" or "instant"
                 )   
             elif dolly.effect_type == DollyEffectType.AUTO_ZOOM and dolly.end_type.value == "instant":
                 print(f"    Auto zoom with zoom percent {dolly.zoom_percent}%")
@@ -214,16 +238,17 @@ class VideoEffectService:
             print("================================")
 
         print(f"Processing video effects for job {job_id}")
-        print(f"Input video: {video_path}")
         print(f"Transition times: {transition_times}")
         print(f"Transition effects: {transition_effects}")
         print(f"Transition durations: {transition_durations}")
         print(f"Dolly effects: {len(dolly_effects or [])} effects")
-        print(f"Output will be: {output_path}")
+        print(f"Output will be: {original_videopath}")
         print("================================")
         # print(original_videopath)
-        outputtttt= str(replace_audio(original_videopath, str(output_path)))
-        return str(rename_video(outputtttt, str(original_videopath)))
+        # if dolly_effects is None or len(dolly_effects) == 0:
+            # print(f"Copied video to {output_path} without dolly effects.")
+            # outputtttt= str(replace_audio(original_videopath, str(output_path)))
+        return str(rename_video(str(output_path), str(original_videopath)))
 
 
     def _mock_process_video_sync(self, input_path: str, output_path: str, job_id: str):
@@ -234,21 +259,7 @@ class VideoEffectService:
         print(f"Mock processing completed for job {job_id}")
 
     def get_video_duration_sync(self, video_path: str) -> float:
-        """
-        Get video duration - synchronous version for thread pool
-        """
-        # TODO: Implement actual duration retrieval with subprocess.run()
-        # Example:
-        # import subprocess
-        # result = subprocess.run([
-        #     "ffprobe", "-v", "quiet", "-show_entries", "format=duration",
-        #     "-of", "csv=p=0", video_path
-        # ], capture_output=True, text=True)
-        # if result.returncode != 0:
-        #     raise RuntimeError(f"FFprobe failed: {result.stderr}")
-        # return float(result.stdout.strip())
-        
-        # Mock duration for testing
+
         return 60.0  # 60 seconds
 
     async def get_video_duration(self, video_path: str) -> float:
