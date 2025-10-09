@@ -191,7 +191,7 @@ class JobService:
     #     asyncio.create_task(self.start_cleanup_task())
         
     #     return job_id
-    async def create_job(self, image_paths: list, prompts: list, audio_path: str, resolution: str = "1920x1080", background: str | None = None) -> str:
+    async def create_job(self, image_paths: list, prompts: list, audio_path: str, resolution: str = "1920x1080") -> str:
         """Tạo job mới - LƯU VÀO MONGODB"""
         job_id = str(uuid.uuid4())
         
@@ -202,7 +202,6 @@ class JobService:
             "prompts": prompts,
             "audio_path": audio_path,
             "resolution": resolution,
-            "background": background,
             "progress": 0,
             "video_path": None,
             "error_message": None,
@@ -318,7 +317,6 @@ class JobService:
     #         if self.redis_client:
     #             asyncio.create_task(self._update_job_in_redis(job_id))
     async def update_job_status(self, job_id: str, status: JobStatus, **kwargs):
-        """Cập nhật job status trong MongoDB"""
         
         update_data = {"status": status}
         update_data.update(kwargs)
@@ -326,7 +324,6 @@ class JobService:
         if status in [JobStatus.COMPLETED, JobStatus.FAILED]:
             update_data["completed_at"] = datetime.now().isoformat()
         
-        # CẬP NHẬT MONGODB thay vì RAM
         await job_repository.update_job(job_id, update_data)
 
     async def _update_job_in_redis(self, job_id: str):
@@ -369,10 +366,9 @@ class JobService:
                             prompts=job_data["prompts"],
                             audio_path=job_data["audio_path"],
                             resolution=job_data["resolution"],
-                            job_id=job_id,
-                            background=job_data.get("background", None)
+                            job_id=job_id
                         )
-                        print("fsfssfsdfsfs: ", list_scene)
+                        # print("fsfssfsdfsfs: ", list_scene)
                         await self.update_job_status(
                             job_id, 
                             JobStatus.COMPLETED, 
@@ -487,35 +483,28 @@ class JobService:
             print(f"Started effect worker {worker_id}")
 
     async def process_effect_jobs(self, worker_id: int):
-        """Effect job worker - xử lý nhiều jobs đồng thời"""
         print(f"Effect worker {worker_id} started")
         
         while True:
             try:
-                # Lấy job từ queue
                 job_data = await self.effect_job_queue.get()
                 job_id = job_data["job_id"]
                 
                 print(f"Effect worker {worker_id} processing job: {job_id}")
                 
-                # Acquire lock cho worker này
                 async with self.effect_processing_locks[worker_id]:
                     self.effect_workers_busy[worker_id] = True
                     
-                    # Cập nhật job status
                     await self.update_effect_job_status(
                         job_id, 
                         JobStatus.PROCESSING, 
                         progress=10,
                         worker_id=worker_id
                     )
-                    
                     try:
-                        # Import effect service
                         from app.services.video_effect_service import VideoEffectService
                         effect_service = VideoEffectService()
                         
-                        # Validate video duration và timing - sử dụng executor
                         loop = asyncio.get_event_loop()
                         video_duration = await loop.run_in_executor(
                             None, 
@@ -524,7 +513,6 @@ class JobService:
                         )
                         await self.update_effect_job_status(job_id, JobStatus.PROCESSING, progress=20)
                         
-                        # Validate effects timing trong executor
                         await loop.run_in_executor(
                             None,
                             effect_service.validate_effects_timing,
@@ -534,12 +522,9 @@ class JobService:
                         )
                         await self.update_effect_job_status(job_id, JobStatus.PROCESSING, progress=30)
                         
-                        # Process video effects - Use thread pool để không block
                         import concurrent.futures
                         
-                        # Tạo wrapper function cho sync processing
                         def process_video_sync():
-                            # Gọi sync version của effect processing
                             return effect_service.apply_effects_sync(
                                 video_path=job_data["video_path"],
                                 transition_times=job_data["transition_times"],
@@ -549,16 +534,17 @@ class JobService:
                                 job_id=job_id
                             )
                         
-                        # Chạy trong thread pool để không block event loop
                         loop = asyncio.get_event_loop()
                         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                             output_path = await loop.run_in_executor(executor, process_video_sync)
                         
+                        # ✅ QUAN TRỌNG: Cập nhật cả output_video_path VÀ video_path
                         await self.update_effect_job_status(
                             job_id,
                             JobStatus.COMPLETED,
                             progress=100,
-                            output_video_path=output_path
+                            output_video_path=output_path,
+                            video_path=output_path  # ✅ Thêm dòng này
                         )
                         
                         print(f"Effect job completed: {job_id} by worker {worker_id}")
@@ -574,7 +560,6 @@ class JobService:
                     finally:
                         self.effect_workers_busy[worker_id] = False
                 
-                # Mark task done
                 self.effect_job_queue.task_done()
                 
             except Exception as e:

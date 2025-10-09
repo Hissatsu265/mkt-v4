@@ -34,7 +34,7 @@ class VideoService:
         timestamp = int(asyncio.get_event_loop().time())
         return unique_id, f"video_{timestamp}_{unique_id}.mp4"
 
-    async def create_video(self, image_paths: List[str], prompts: List[str], audio_path: str, resolution: str, job_id: str,background:None) -> str:
+    async def create_video(self, image_paths: List[str], prompts: List[str], audio_path: str, resolution: str, job_id: str) -> str:
         jobid, output_filename = self.generate_output_filename()
         output_path = self.output_dir / output_filename
         try:
@@ -42,23 +42,31 @@ class VideoService:
             from app.services.job_service import job_service
             await job_service.update_job_status(job_id, "processing", progress=99)
 
-            list_scene = await run_job(jobid, prompts, image_paths, audio_path, output_path,resolution,background)  
-            print(output_path) 
-            return str(output_path),list_scene
-            # path_directus= Uploadfile_directus(str(output_path))
-            # if path_directus is not None and output_path.exists() :
-            #     print(f"Video upload successfully: {path_directus}")
-            #     print(f"Job ID: {job_id}, Output Path: {path_directus}")
-            #     os.remove(str(output_path))
-            #     return str(path_directus),list_scene
+            list_scene = await run_job(jobid, prompts, image_paths, audio_path, output_path,resolution)  
+            print(str(output_path)) 
+            # if os.path.exists(str(output_path)):
+            #     print("✅ File tồn tại!")
             # else:
-            #     raise Exception("Cannot upload video to Directus or Video creation failed - output file not found")
+            #     print("❌ File không tồn tại.")
+            # return str(output_path),list_scene
+            path_directus= Uploadfile_directus(str(output_path))
+            # if os.path.exists(str(output_path)):
+            #     print("✅ File tồn tại!")
+            # else:
+            #     print("❌ File không tồn tại.")
+            if path_directus is not None and output_path.exists() :
+                print(f"Video upload successfully: {path_directus}")
+                print(f"Job ID: {job_id}, Output Path: {path_directus}")
+                # os.remove(str(output_path))
+                return str(path_directus),list_scene
+            else:
+                raise Exception("Cannot upload video to Directus or Video creation failed - output file not found")
     
         except Exception as e:
             if output_path.exists():
                 output_path.unlink()
             raise e
-async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_video,resolution,background):
+async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_video,resolution):
     print("resolution: ",resolution)
     generate_output_filename = output_path_video
     list_scene=[]
@@ -148,6 +156,7 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
         tempt=trim_video_start(generate_output_filename, duration=0.5)
         output_file = replace_audio_trimmed(generate_output_filename,cond_audio_path,output_path_video)
         try:
+            print("sdgsfsfgfsgfg",generate_output_filename)
             os.remove(str(generate_output_filename))
             os.remove(str(audiohavesecondatstart))
             os.remove(str(cond_audio_path))
@@ -376,44 +385,25 @@ async def generate_video_cmd(prompt, cond_image, cond_audio_path, output_path, j
         
         
         if prompt.strip() == "" or prompt is None or prompt == "none":
-            workflow["241"]["inputs"]["positive_prompt"] = "A photorealistic, high-quality video of the person in a side-facing position, slightly turned to the left. The person remains calm and professional: the head, eyes, and facial muscles are stable, with minimal facial expressions. The mouth moves gently and smoothly in perfect sync with the audio. The hands and arms move naturally to accompany speech, adding subtle, realistic gestures. The overall look is natural, professional, stable, and expressive, like a relaxed, engaging conversation."    
+            workflow["241"]["inputs"]["positive_prompt"] = "A realistic video of a person confidently presenting a product. The person maintains a neutral, professional facial expression without exaggerated emotions or head movement. They hold a product naturally in their hand while occasionally making gentle hand gestures to emphasize their words, creating the impression of someone explaining or promoting the product in a calm, confident manner."    
         else:
             workflow["241"]["inputs"]["positive_prompt"] = prompt
             
-        workflow["241"]["inputs"]["negative_prompt"] = "excessive head movement, nodding, tilting, shaking, turning face away, unstable body, exaggerated expressions, eyebrow movement, cheek movement, eye shifting, blinking too much, distorted lips, unnatural lip sync, jerky motion, overacting, unrealistic expressions, blurry frames, warped anatomy, unnatural gestures, unstable rendering"
+        workflow["241"]["inputs"]["negative_prompt"] = "bright tones, overexposed, blurred details, move, head movement, subtitles, style, works, paintings, overall gray, worst quality, low quality, JPEG compression residue, ugly, incomplete, extra fingers, poorly drawn hands, poorly drawn faces, deformed, disfigured, misshapen limbs, fused fingers, still picture, messy background, three legs, many people in the background, walking backwards"
         wf_h=448
         wf_w=448
-        if resolution == "1080x1920":
-            wf_w = 1080
-            wf_h = 1920
-        elif resolution=="1920x1080":
-            wf_w = 1920
-            wf_h = 1080
-            # workflow["208"]["inputs"]["frame_window_size"] = 41
-        elif resolution=="480x854": 
-            wf_w = 480
-            wf_h = 864
-        elif resolution=="854x480": 
-            wf_w = 864
-            wf_h = 480
-        elif resolution=="1280x720":    
-            wf_w = 1040
-            wf_h = 592 
-        elif resolution=="720x1280":
-            wf_w = 592
-            wf_h = 1040
+        if resolution == "1:1":
+            wf_w = 720
+            wf_h = 720
         elif resolution=="16:9":    
             wf_w = 1040
             wf_h = 592 
         elif resolution=="9:16":
             wf_w = 592
             wf_h = 1040
-        elif resolution=="1:1":
-            wf_w = 720
-            wf_h = 720
         elif resolution=="720":
             wf_w = 448
-            wf_h = 448
+            wf_h = 800
 
         workflow["245"]["inputs"]["value"] = wf_w
         workflow["246"]["inputs"]["value"] = wf_h
@@ -447,11 +437,14 @@ async def generate_video_cmd(prompt, cond_image, cond_audio_path, output_path, j
             await delete_file_async(str(video_path.replace("-audio.mp4",".png")))
             file_size = os.path.getsize(video_path)
             print(f"📏 File size: {file_size / (1024*1024):.2f} MB")
-            wf_w = 720
-            wf_h = 1280
-            if resolution=="1280x720":    
+            # wf_w = 720
+            # wf_h = 1280
+            if resolution=="16:9":    
                 wf_w = 1280
                 wf_h = 720 
+            elif resolution=="9:16":
+                wf_w = 720
+                wf_h = 1280
             await scale_video(
                 input_path=video_path,
                 output_path=output_path,

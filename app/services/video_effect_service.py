@@ -10,6 +10,7 @@ from animation.zoomin import safe_create_face_zoom_video
 from animation.safe_check import wait_for_file_ready
 import asyncio
 import numpy as np
+from directus.file_upload import Uploadfile_directus
 
 import shutil
 import math
@@ -200,35 +201,35 @@ class VideoEffectService:
                     remove_mode=dolly.end_type.value,
                     crf=18   # "smooth" or "instant"
                 )   
-            elif dolly.effect_type == DollyEffectType.AUTO_ZOOM and dolly.end_type.value == "instant":
-                print(f"    Auto zoom with zoom percent {dolly.zoom_percent}%")
-                safe_create_face_zoom_video(
-                    input_video=video_path,
-                    output_video=str(outputpath_raw_eff),
-                    zoom_type="instant",
-                    zoom_start_time=time_begin + dolly.start_time,
-                    zoom_duration=dolly.end_time - dolly.start_time,
-                    zoom_factor=2 - dolly.zoom_percent / 100.0,
-                    enable_shake=False,
-                    shake_intensity=1,
-                    shake_start_delay=0.3
-                )
-            elif dolly.effect_type == DollyEffectType.AUTO_ZOOM:
-                print(f"    Auto zoom with zoom percent {dolly.zoom_percent}%")
-                print("afdfs", dolly.start_time + dolly.duration)
-                print("afdfs", dolly.end_time - dolly.start_time)
-                safe_create_face_zoom_video(
-                    input_video=video_path,
-                    output_video=str(outputpath_raw_eff),
-                    zoom_type="gradual",
-                    gradual_start_time=time_begin + dolly.start_time,
-                    gradual_end_time=dolly.start_time + dolly.duration,
-                    hold_duration=dolly.end_time - dolly.start_time,
-                    zoom_factor=2 - dolly.zoom_percent / 100.0,
-                    enable_shake=False,
-                    shake_intensity=1,
-                    shake_start_delay=0.3
-                ) 
+            # elif dolly.effect_type == DollyEffectType.AUTO_ZOOM and dolly.end_type.value == "instant":
+            #     print(f"    Auto zoom with zoom percent {dolly.zoom_percent}%")
+            #     safe_create_face_zoom_video(
+            #         input_video=video_path,
+            #         output_video=str(outputpath_raw_eff),
+            #         zoom_type="instant",
+            #         zoom_start_time=time_begin + dolly.start_time,
+            #         zoom_duration=dolly.end_time - dolly.start_time,
+            #         zoom_factor=2 - dolly.zoom_percent / 100.0,
+            #         enable_shake=False,
+            #         shake_intensity=1,
+            #         shake_start_delay=0.3
+            #     )
+            # elif dolly.effect_type == DollyEffectType.AUTO_ZOOM:
+            #     print(f"    Auto zoom with zoom percent {dolly.zoom_percent}%")
+            #     print("afdfs", dolly.start_time + dolly.duration)
+            #     print("afdfs", dolly.end_time - dolly.start_time)
+            #     safe_create_face_zoom_video(
+            #         input_video=video_path,
+            #         output_video=str(outputpath_raw_eff),
+            #         zoom_type="gradual",
+            #         gradual_start_time=time_begin + dolly.start_time,
+            #         gradual_end_time=dolly.start_time + dolly.duration,
+            #         hold_duration=dolly.end_time - dolly.start_time,
+            #         zoom_factor=2 - dolly.zoom_percent / 100.0,
+            #         enable_shake=False,
+            #         shake_intensity=1,
+            #         shake_start_delay=0.3
+            #     ) 
             if os.path.exists(output_path):
                 os.remove(output_path)
                 print(f"Deleted file: {output_path}")
@@ -242,14 +243,15 @@ class VideoEffectService:
         print(f"Transition effects: {transition_effects}")
         print(f"Transition durations: {transition_durations}")
         print(f"Dolly effects: {len(dolly_effects or [])} effects")
-        print(f"Output will be: {original_videopath}")
+        print(f"Output will be: {output_path}")
         print("================================")
         # print(original_videopath)
         # if dolly_effects is None or len(dolly_effects) == 0:
             # print(f"Copied video to {output_path} without dolly effects.")
             # outputtttt= str(replace_audio(original_videopath, str(output_path)))
-        return str(rename_video(str(output_path), str(original_videopath)))
-
+        # return str(rename_video(str(output_path), str(original_videopath)))
+        path= Uploadfile_directus(str(output_path))
+        return path
 
     def _mock_process_video_sync(self, input_path: str, output_path: str, job_id: str):
         import shutil

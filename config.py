@@ -21,7 +21,7 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 
 # API Configuration
 API_HOST = os.getenv("API_HOST", "0.0.0.0")
-API_PORT = int(os.getenv("API_PORT", 8000))
+API_PORT = int(os.getenv("API_PORT", 8003))
 
 # Job cleanup configuration
 JOB_RETENTION_HOURS = int(os.getenv("JOB_RETENTION_HOURS", 24))  # Giữ job trong 24h

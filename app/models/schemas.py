@@ -4,16 +4,6 @@ from enum import Enum
 
 class Resolution(str, Enum):
     HD_720P = "720"
-    FHD_1080P = "1080"
-    QHD_1440P = "1440"
-    UHD_4K = "2160"
-    SQUARE_1080 = "1080"  
-    HORIZONTAL_1080="1080x1920"
-    VERTICAL_1080 = "1920x1080"
-    HORIZONTAL_480="480x854"
-    VERTICAL_480 = "854x480"
-    HORIZONTAL_720="720x1280"
-    VERTICAL_720 = "1280x720"
     RATIO_169 = "16:9"
     RATIO_916 = "9:16"
     RATIO_11 = "1:1"
@@ -28,7 +18,6 @@ class VideoCreateRequest(BaseModel):
     prompts: List[str]
     audio_path: str
     resolution: Resolution = Resolution.HD_720P
-    background: str
 
 class VideoCreateResponse(BaseModel):
     job_id: str
@@ -114,9 +103,9 @@ class TransitionEffect(str, Enum):
     NONE="none"
 
 class DollyEffectType(str, Enum):
-    AUTO_ZOOM = "auto_zoom"        # Zoom tự động
+    # AUTO_ZOOM = "auto_zoom"        # Zoom tự động
     MANUAL_ZOOM = "manual_zoom"    # Zoom thủ công (có tọa độ X, Y)
-    DOUBLE_ZOOM = "double_zoom"    # Double zoom
+    # DOUBLE_ZOOM = "double_zoom"    # Double zoom
     # PAN_ZOOM = "pan_zoom"          # Pan kết hợp zoom
 
 # class DollyEffect(BaseModel):

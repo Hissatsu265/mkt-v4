@@ -14,130 +14,129 @@ from directus.function_downloadfile import download_image, download_audio
 
 router = APIRouter(prefix="/api/v1", tags=["video"])
 
-@router.post("/videos/create", response_model=VideoCreateResponse)
-async def create_video(request: VideoCreateRequest):
-    
-    if len(request.image_paths) != len(request.prompts):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Number of images must match number of prompts"
-        )
-    
-    # Kiểm tra file tồn tại - sử dụng asyncio để không block
-    async def check_file_exists(file_path: str, file_type: str):
-        try:
-            # Sử dụng thread pool để check file không block event loop
-            loop = asyncio.get_event_loop()
-            exists = await loop.run_in_executor(None, os.path.exists, file_path)
-            if not exists:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"{file_type} file not found: {file_path}"
-                )
-        except HTTPException:
-            raise
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error checking {file_type} file: {str(e)}"
-            )
-    
-    # Check files concurrently
-    check_tasks = []
-    for img_path in request.image_paths:
-        check_tasks.append(check_file_exists(img_path, "Image"))
-    check_tasks.append(check_file_exists(request.audio_path, "Audio"))
-    
-    try:
-        await asyncio.gather(*check_tasks)
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to validate files: {str(e)}"
-        )
-    
-    try:
-        job_id = await job_service.create_job(
-            image_paths=request.image_paths,
-            prompts=request.prompts,
-            audio_path=request.audio_path,
-            resolution=request.resolution,
-            background=request.background  
-        )
-        
-        # Lấy thông tin queue để trả về cho user
-        queue_info = await job_service.get_queue_info()
-        
-        return VideoCreateResponse(
-            job_id=job_id,
-            status=JobStatus.PENDING,
-            message=f"Job created successfully. Position in queue: {queue_info['pending_jobs']}",
-            queue_position=queue_info['pending_jobs'],
-            estimated_wait_time=queue_info['pending_jobs'] * 5  
-        )
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create job: {str(e)}"
-        )
-# ===============================================================
 # @router.post("/videos/create", response_model=VideoCreateResponse)
 # async def create_video(request: VideoCreateRequest):
+    
 #     if len(request.image_paths) != len(request.prompts):
 #         raise HTTPException(
 #             status_code=status.HTTP_400_BAD_REQUEST,
 #             detail="Number of images must match number of prompts"
 #         )
-
+    
+#     # Kiểm tra file tồn tại - sử dụng asyncio để không block
+#     async def check_file_exists(file_path: str, file_type: str):
+#         try:
+#             # Sử dụng thread pool để check file không block event loop
+#             loop = asyncio.get_event_loop()
+#             exists = await loop.run_in_executor(None, os.path.exists, file_path)
+#             if not exists:
+#                 raise HTTPException(
+#                     status_code=status.HTTP_400_BAD_REQUEST,
+#                     detail=f"{file_type} file not found: {file_path}"
+#                 )
+#         except HTTPException:
+#             raise
+#         except Exception as e:
+#             raise HTTPException(
+#                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#                 detail=f"Error checking {file_type} file: {str(e)}"
+#             )
+    
+#     # Check files concurrently
+#     check_tasks = []
+#     for img_path in request.image_paths:
+#         check_tasks.append(check_file_exists(img_path, "Image"))
+#     check_tasks.append(check_file_exists(request.audio_path, "Audio"))
+    
 #     try:
-#         # Tải ảnh và audio từ URL về local tạm
-#         # local_images = []
-#         # for img_url in request.image_paths:
-#         #     local_images.append(download_image(img_url))
-
-#         # local_audio = download_audio(request.audio_path)
-#         # Tải ảnh và thay thế trực tiếp vào request.image_paths
-#         request.image_paths = [
-#             download_image(img_url) for img_url in request.image_paths
-#         ]
-#         request.audio_path = download_audio(request.audio_path)
-#         # print("Downloaded images:", request.image_paths)
-#         # print("s====================s")
-#         # print("Downloaded audio:", request.audio_path)
+#         await asyncio.gather(*check_tasks)
+#     except HTTPException:
+#         raise
 #     except Exception as e:
 #         raise HTTPException(
 #             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-#             detail=f"Failed to download files: {str(e)}"
+#             detail=f"Failed to validate files: {str(e)}"
 #         )
-
+    
 #     try:
-#         # Tạo job với path local đã tải
 #         job_id = await job_service.create_job(
 #             image_paths=request.image_paths,
 #             prompts=request.prompts,
 #             audio_path=request.audio_path,
-#             resolution=request.resolution,
-#             background=request.background
+#             resolution=request.resolution
 #         )
-
+        
+#         # Lấy thông tin queue để trả về cho user
 #         queue_info = await job_service.get_queue_info()
-
+        
 #         return VideoCreateResponse(
 #             job_id=job_id,
 #             status=JobStatus.PENDING,
 #             message=f"Job created successfully. Position in queue: {queue_info['pending_jobs']}",
 #             queue_position=queue_info['pending_jobs'],
-#             estimated_wait_time=queue_info['pending_jobs'] * 5
+#             estimated_wait_time=queue_info['pending_jobs'] * 5  
 #         )
-
+        
 #     except Exception as e:
 #         raise HTTPException(
 #             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
 #             detail=f"Failed to create job: {str(e)}"
 #         )
+# ===============================================================
+@router.post("/videos/create", response_model=VideoCreateResponse)
+async def create_video(request: VideoCreateRequest):
+    if len(request.image_paths) != len(request.prompts):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Number of images must match number of prompts"
+        )
+
+    try:
+        # Tải ảnh và audio từ URL về local tạm
+        # local_images = []
+        # for img_url in request.image_paths:
+        #     local_images.append(download_image(img_url))
+
+        # local_audio = download_audio(request.audio_path)
+        # Tải ảnh và thay thế trực tiếp vào request.image_paths
+        request.image_paths = [
+            download_image(img_url) for img_url in request.image_paths
+        ]
+        request.audio_path = download_audio(request.audio_path)
+        # print("Downloaded images:", request.image_paths)
+        # print("s====================s")
+        # print("Downloaded audio:", request.audio_path)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to download files: {str(e)}"
+        )
+
+    try:
+        # Tạo job với path local đã tải
+        job_id = await job_service.create_job(
+            image_paths=request.image_paths,
+            prompts=request.prompts,
+            audio_path=request.audio_path,
+            resolution=request.resolution
+            # background=request.background
+        )
+
+        queue_info = await job_service.get_queue_info()
+
+        return VideoCreateResponse(
+            job_id=job_id,
+            status=JobStatus.PENDING,
+            message=f"Job created successfully. Position in queue: {queue_info['pending_jobs']}",
+            queue_position=queue_info['pending_jobs'],
+            estimated_wait_time=queue_info['pending_jobs'] * 5
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create job: {str(e)}"
+        )
 # =============================================================================
 @router.get("/jobs/{job_id}/status", response_model=JobStatusResponse)
 async def get_job_status(job_id: str):
@@ -410,6 +409,93 @@ async def clear_queue():
 # ========================
 # ========================
 
+import os
+import aiohttp
+import aiofiles
+import mimetypes
+import tempfile
+from fastapi import HTTPException, status
+import asyncio
+
+import os
+import aiohttp
+import aiofiles
+import mimetypes
+import tempfile
+from fastapi import HTTPException, status
+import asyncio
+
+async def ensure_video_local(request):
+    video_path = request.video_path
+
+    # Nếu là URL thì tải video về local
+    if video_path.startswith("http://") or video_path.startswith("https://"):
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(video_path) as resp:
+                    if resp.status != 200:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"Failed to download video from URL: {video_path}"
+                        )
+                    
+                    content_type = resp.headers.get("Content-Type", "").lower().split(";")[0].strip()
+
+                    # Một số server không trả về đúng MIME type (trả về application/octet-stream)
+                    if not (content_type.startswith("video/") or content_type == "application/octet-stream"):
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"Invalid file type ({content_type}). Expected a video."
+                        )
+
+                    # Đoán phần mở rộng dựa vào content-type hoặc URL
+                    suffix = mimetypes.guess_extension(content_type) or os.path.splitext(video_path)[1] or ".mp4"
+
+                    temp_fd, temp_path = tempfile.mkstemp(suffix=suffix, prefix="downloaded_video_")
+                    os.close(temp_fd)
+
+                    async with aiofiles.open(temp_path, "wb") as f:
+                        await f.write(await resp.read())
+
+                    # Kiểm tra nhanh bytes đầu có đúng kiểu video
+                    async with aiofiles.open(temp_path, "rb") as f:
+                        header = await f.read(16)
+                        if not any(sig in header for sig in [b"ftyp", b"RIFF", b"moov", b"mdat"]):
+                            raise HTTPException(
+                                status_code=status.HTTP_400_BAD_REQUEST,
+                                detail="Downloaded file does not appear to be a valid video."
+                            )
+
+                    request.video_path = temp_path
+                    return request
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error downloading video: {e}"
+            )
+
+    # Kiểm tra file local tồn tại
+    loop = asyncio.get_event_loop()
+    exists = await loop.run_in_executor(None, os.path.exists, request.video_path)
+    if not exists:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Video file not found: {request.video_path}"
+        )
+
+    # MIME check cho file local
+    mime_type, _ = mimetypes.guess_type(request.video_path)
+    if mime_type and not mime_type.startswith("video/"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid file type detected for: {request.video_path}"
+        )
+
+    return request
+
 
 
 
@@ -417,9 +503,7 @@ async def clear_queue():
 
 @router.post("/videos/effects", response_model=VideoEffectResponse)
 async def create_video_effects(request: VideoEffectRequest):
-    """Tạo video với hiệu ứng - Multiple workers processing"""
     
-    # Validate input
     if len(request.transition_times) != len(request.transition_effects):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -432,8 +516,8 @@ async def create_video_effects(request: VideoEffectRequest):
             detail="Number of transition_effects must match transition_durations"
         )
     
-    # Kiểm tra video file tồn tại
     try:
+        request=await ensure_video_local(request)
         loop = asyncio.get_event_loop()
         exists = await loop.run_in_executor(None, os.path.exists, request.video_path)
         if not exists:
