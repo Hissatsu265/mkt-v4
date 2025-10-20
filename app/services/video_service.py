@@ -24,6 +24,44 @@ from utilities.check_audio_safe import wait_for_audio_ready
 # from app.services.create_video_infinitetalk import load_workflow,wait_for_completion,queue_prompt,find_latest_video
 import asyncio
 from directus.file_upload import Uploadfile_directus
+
+def custom_random_sequence(n):
+    if n <= 0:
+        return []
+    
+    nums = [1, 2, 3, 4]
+    sequence = []
+    last = None
+    not_one_count = 0  # đếm số lần không ra 1 liên tiếp
+    
+    for i in range(n):
+        # --- Quy tắc đặc biệt cho lượt 1 và 2 ---
+        if i == 0:
+            value = random.choice(nums)
+        elif i == 1 and 1 not in sequence:
+            value = 1
+        else:
+            # tạo danh sách các lựa chọn hợp lệ
+            candidates = [x for x in nums if x != last]
+            
+            # Nếu đã quá 2 lần không ra 1 → bắt buộc ra 1
+            if not_one_count >= 2:
+                value = 1
+            else:
+                value = random.choice(candidates)
+        
+        # đảm bảo không ra 1 quá thưa khi n < 3
+        if i == n - 1 and n < 3 and 1 not in sequence and value != 1:
+            value = 1
+        
+        # cập nhật đếm
+        not_one_count = 0 if value == 1 else not_one_count + 1
+        
+        sequence.append(value)
+        last = value
+    
+    return sequence
+
 class VideoService:
     def __init__(self):
         from config import OUTPUT_DIR
@@ -57,10 +95,13 @@ class VideoService:
             if path_directus is not None and output_path.exists() :
                 print(f"Video upload successfully: {path_directus}")
                 print(f"Job ID: {job_id}, Output Path: {path_directus}")
-                # os.remove(str(output_path))
+                os.remove(str(output_path))
                 return str(path_directus),list_scene
             else:
-                raise Exception("Cannot upload video to Directus or Video creation failed - output file not found")
+                if not output_path.exists():
+                    raise Exception("Cannot create video")
+                else:    
+                    raise Exception("Cannot upload video to Directus")
     
         except Exception as e:
             if output_path.exists():
@@ -70,21 +111,24 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
     print("resolution: ",resolution)
     generate_output_filename = output_path_video
     list_scene=[]
-    if get_audio_duration(cond_audio_path) > 20:
+    if prompts[0]=="" or prompts[0] is None or prompts[0].lower() == "none":
+        prompts[0]="A realistic video of a person confidently presenting a product they are holding. The person speaks clearly and professionally, as if explaining the product’s features in an advertisement. Their facial expression remains pleasant and natural, with slight movements to appear engaging but not exaggerated. Their hand gestures are smooth and minimal, focusing attention on the product, creating the impression of a calm and confident presenter in a product promotion video."
+    if get_audio_duration(cond_audio_path) > 12:
         output_directory = "output_segments"
         os.makedirs(output_directory, exist_ok=True)
         output_paths,durations, result = process_audio_file(cond_audio_path, output_directory)
         results=[]
         last_value=None
+        list_random = custom_random_sequence(len(output_paths))
         for i, output_path in enumerate(output_paths):
             if i<len(output_paths)-1:
                 list_scene.append(get_audio_duration(output_path))
             # ==============Random image for each scene=============
-            if len(cond_images)>1:
-                choices = [x for x in range(len(prompts)) if x != last_value] 
-                current_value = random.choice(choices)  # chọn ngẫu nhiên
-                last_value = current_value  # lưu 
-            else: current_value=0
+            # if len(cond_images)>1:
+            #     choices = [x for x in range(len(prompts)) if x != last_value] 
+            #     current_value = random.choice(choices)  # chọn ngẫu nhiên
+            #     last_value = current_value  # lưu 
+            # else: current_value=0
             # ===============================================================================
             # print(f"Audio segment {i+1}: {output_path} (Duration: {durations[i]}s)")
             # print(cond_images)
@@ -95,18 +139,31 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
             audiohavesecondatstart=str(BASE_DIR / audiohavesecondatstart)
             # print("dfsdfsdfsd:   ", audiohavesecondatstart)
             # print(type(audiohavesecondatstart))
-       
+
             # =================================================================
+            current_value=0
             file_path = str(cond_images[current_value])
-        
-            output=await generate_video_cmd(
-                prompt=prompts[current_value],
-                cond_image=str(file_path),# 
-                cond_audio_path=audiohavesecondatstart, 
-                output_path=clip_name,
-                job_id=job_id,
-                resolution=resolution
-            )
+            
+            if (list_random[i] == 1):
+                output=await generate_video_cmd(
+                    prompt=prompts[current_value],
+                    cond_image=str(file_path),# 
+                    cond_audio_path=audiohavesecondatstart, 
+                    output_path=clip_name,
+                    job_id=job_id,
+                    resolution=resolution
+                )
+            else:
+                output=await generate_video_fast(
+                    prompt=prompts[current_value],
+                    cond_image=str(cond_images[1]),
+                    cond_audio_path=audiohavesecondatstart, 
+                    output_path=clip_name,
+                    job_id=job_id,
+                    resolution=resolution,
+                    type=list_random[i]
+                )
+
             trim_video_start(clip_name, duration=0.5)
             output_file=cut_video(clip_name, get_audio_duration(output_path)-0.5) 
             results.append(output_file)
@@ -134,6 +191,10 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
         except Exception as e:
             print(f"❌ Error removing temporary files: {str(e)}")
         return list_scene
+    # =========================================================================================
+    # =========================================================================================
+    # =========================================================================================    
+
     else:
         audiohavesecondatstart = add_silence_to_start(cond_audio_path, job_id, duration_ms=500)
         generate_output_filename=os.path.join(os.getcwd(), f"{job_id}_noaudio.mp4")
@@ -384,9 +445,10 @@ async def generate_video_cmd(prompt, cond_image, cond_audio_path, output_path, j
         # =============================================================
         
         
-        if prompt.strip() == "" or prompt is None or prompt == "none":
-            workflow["241"]["inputs"]["positive_prompt"] = "A realistic video of a person confidently presenting a product. The person maintains a neutral, professional facial expression without exaggerated emotions or head movement. They hold a product naturally in their hand while occasionally making gentle hand gestures to emphasize their words, creating the impression of someone explaining or promoting the product in a calm, confident manner."    
+        if prompt.strip() == "" or prompt is None or prompt.lower() == "none" :
+            workflow["241"]["inputs"]["positive_prompt"] = "A realistic video of a person confidently giving a lecture. Their face remains neutral and professional, without strong expressions or noticeable head movement. Their hands move up and down slowly and naturally to emphasize key points, without swinging side to side, creating the impression of a teacher clearly explaining a lesson."    
         else:
+            print("dùng prompt của mình")
             workflow["241"]["inputs"]["positive_prompt"] = prompt
             
         workflow["241"]["inputs"]["negative_prompt"] = "bright tones, overexposed, blurred details, move, head movement, subtitles, style, works, paintings, overall gray, worst quality, low quality, JPEG compression residue, ugly, incomplete, extra fingers, poorly drawn hands, poorly drawn faces, deformed, disfigured, misshapen limbs, fused fingers, still picture, messy background, three legs, many people in the background, walking backwards"
@@ -404,6 +466,9 @@ async def generate_video_cmd(prompt, cond_image, cond_audio_path, output_path, j
         elif resolution=="720":
             wf_w = 448
             wf_h = 800
+        elif resolution=="720_16:9":
+            wf_h = 448
+            wf_w = 800
 
         workflow["245"]["inputs"]["value"] = wf_w
         workflow["246"]["inputs"]["value"] = wf_h
@@ -542,3 +607,22 @@ async def scale_video(input_path, output_path, target_w, target_h):
     print(f"Video saved: {output_path}")
     
     return info
+# ==================================================================
+from asyncio import Semaphore
+
+video_semaphore = Semaphore(1)
+
+async def generate_video_fast(prompt, cond_image, cond_audio_path, output_path, job_id, resolution, type):
+    if type == 2:
+        from animation.zoom_in_effect import zoom_and_light_effect
+        
+        async with video_semaphore:  
+            await asyncio.to_thread(
+                zoom_and_light_effect,
+                image_path=cond_image,
+                audio_path=cond_audio_path,
+                output_path=output_path,
+                zoom_factor=1.3,
+                zoom_portion=0.9,
+                light_portion=0.9
+            )

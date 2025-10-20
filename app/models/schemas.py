@@ -3,10 +3,12 @@ from typing import List, Optional
 from enum import Enum
 
 class Resolution(str, Enum):
-    HD_720P = "720"
     RATIO_169 = "16:9"
+    HD_720P = "720"
+    HD_720P1 = "720_16:9"
     RATIO_916 = "9:16"
     RATIO_11 = "1:1"
+
 class JobStatus(str, Enum):
     PENDING = "pending"
     PROCESSING = "processing"
@@ -17,7 +19,7 @@ class VideoCreateRequest(BaseModel):
     image_paths: List[str]
     prompts: List[str]
     audio_path: str
-    resolution: Resolution = Resolution.HD_720P
+    resolution: Resolution = Resolution.RATIO_916
 
 class VideoCreateResponse(BaseModel):
     job_id: str

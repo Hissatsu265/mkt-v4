@@ -7,10 +7,10 @@ directus_config = DirectusConfig()
 
 def Uploadfile_directus(path):
     # path = "/home/toan/marketing-video-ai/temp_no_audio.mp4"
-    print("=== DEBUG Directus ===")
-    print(f"URL: {DirectusConfig.DIRECTUS_URL}")
-    print(f"TOKEN: {DirectusConfig.ACCESS_TOKEN}")
-    print("======================")
+    # print("=== DEBUG Directus ===")
+    # print(f"URL: {DirectusConfig.DIRECTUS_URL}")
+    # print(f"TOKEN: {DirectusConfig.ACCESS_TOKEN}")
+    # print("======================")
     try:
         directus_response = upload_file_to_directus(path)
         print("Upload successful!")
