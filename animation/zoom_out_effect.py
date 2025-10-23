@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 from moviepy.editor import ImageSequenceClip, AudioFileClip
 
-def zoom_and_light_effect(
+def zoom_and_light_effect1(
     image_path,
     audio_path,
     output_path="zoom_light_output.mp4",
