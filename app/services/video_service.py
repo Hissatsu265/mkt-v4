@@ -27,8 +27,10 @@ from directus.file_upload import Uploadfile_directus
 from app.services.job_service import job_service
 from app.services.img_service import get_random_prompt
 from animation.full_transition_effect import  apply_multiple_effects
-
+from animation.fairyending import fairyending
 image_paths_product = []
+image_paths_product_rout360=[]
+video_paths_product_rout360=[]
 import cv2
 import numpy as np
 
@@ -133,40 +135,56 @@ def random_transition_list(n):
 def custom_random_sequence(n):
     if n <= 0:
         return []
-    
-    nums = [1, 2, 3, 4,5]
+
+    nums = [1, 2, 3, 4, 5, 6, 7]
     sequence = []
+    last_seen = {num: -10 for num in nums}  # lưu vị trí xuất hiện gần nhất
     last = None
-    not_one_count = 0  # đếm số lần không ra 1 liên tiếp
-    
+
     for i in range(n):
-        # --- Quy tắc đặc biệt cho lượt 1 và 2 ---
-        if i == 0:
-            value = random.choice(nums)
-        elif i == 1 and 1 not in sequence:
-            value = 1
-        else:
-            # tạo danh sách các lựa chọn hợp lệ
-            candidates = [x for x in nums if x != last]
-            
-            # Nếu đã quá 2 lần không ra 1 → bắt buộc ra 1
-            if not_one_count >= 2:
+        # --- Quy tắc đặc biệt cho 2 cảnh đầu ---
+        if i < 2:
+            # đảm bảo trong 2 cảnh đầu có ít nhất một số 1
+            if i == 1 and 1 not in sequence:
                 value = 1
             else:
+                candidates = [x for x in nums if x != last and x != 6]  # không chọn 6 sớm
                 value = random.choice(candidates)
-        
-        # đảm bảo không ra 1 quá thưa khi n < 3
-        if i == n - 1 and n < 3 and 1 not in sequence and value != 1:
-            value = 1
-        
-        # cập nhật đếm
-        not_one_count = 0 if value == 1 else not_one_count + 1
-        
+        else:
+            candidates = []
+            for num in nums:
+                # Không chọn trùng với cảnh trước
+                if num == last:
+                    continue
+                # Số 6 chỉ được xuất hiện ở vị trí n-1 hoặc n-2
+                if num == 6 and i < n - 2:
+                    continue
+                # Nếu là 1, phải cách lần trước ít nhất 4 cảnh
+                if num == 1 and i - last_seen[num] < 4:
+                    continue
+                if num == 7 and i - last_seen[num] < 4:
+                    continue
+                # Nếu là 2-6, phải cách lần trước ít nhất 5 cảnh
+                if num != 1 and num != 7 and i - last_seen[num] < 5:
+                    continue
+                candidates.append(num)
+
+            # Nếu không còn candidate hợp lệ → nới lỏng điều kiện
+            if not candidates:
+                candidates = [x for x in nums if x != last]
+                # vẫn ưu tiên không chọn 6 sớm
+                if i < n - 2 and 6 in candidates:
+                    candidates.remove(6)
+
+            value = random.choice(candidates)
+
         sequence.append(value)
+        last_seen[value] = i
         last = value
-    
+
     return sequence
-    # return [1,5,2,1,5,2,1,5,2][:n]  
+
+    # return [7,7,7,7,7][:n]  
     # return [2,3,4,2,3,4,2,3,4,2,3,4][:n]
 
 class VideoService:
@@ -224,10 +242,14 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
         output_paths,durations, result = process_audio_file(cond_audio_path, output_directory)
         # =========================================================================
         results=[]
+
         first_time=True
         last_value=None
         list_random = custom_random_sequence(len(output_paths))
-        count = len(list(filter(lambda x: x != 1, list_random)))
+        # count = len(list(filter(lambda x: x != 1, list_random)))
+        count = len(list(filter(lambda x: x != 1 and x != 5 and x!=6, list_random)))
+        count1=len(list(filter(lambda x: x ==7, list_random)))
+
         index_forimgpro=0
         # ==========================================================================
         for i, output_path in enumerate(output_paths):
@@ -278,7 +300,7 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
                 )
                 os.remove(clip_name111)
             else:
-
+                
                 output=await generate_video_fast(
                     prompt=prompts[current_value],
                     cond_image=str(cond_images[1]),
@@ -289,15 +311,13 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
                     type=list_random[i],
                     first_time=first_time,
                     howmuch=count,
-                    index=index_forimgpro
+                    index=index_forimgpro,
+                    howmuch1=count1
                 )
                 first_time=False
                 index_forimgpro+=1
-            # print("111111111111111111111111111111")
             trim_video_start(clip_name, duration=0.5)
-            # print("22222222222222222222222")
             output_file=cut_video(clip_name, get_audio_duration(output_path)-0.5) 
-            # print("333333333333333333333333")
             results.append(output_file)
             try:
                 # os.remove(pad_file)
@@ -324,6 +344,8 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
         #     print(f"❌ Error removing temporary files: {str(e)}")
         # return list_scene
         global image_paths_product
+        for file_anh in image_paths_product:
+            await delete_file_async(str(file_anh))
         image_paths_product=[]
         output_file = await concat_and_merge_async(
             job_id=job_id,
@@ -568,7 +590,7 @@ async def find_latest_video(prefix, output_dir=str(BASE_DIR / "ComfyUI/output"))
     return await loop.run_in_executor(None, _find_files)
 
 # ========== Hàm chính được cập nhật ==========
-async def generate_video_cmd(prompt, cond_image, cond_audio_path, output_path, job_id,resolution):
+async def generate_video_cmd(prompt, cond_image, cond_audio_path, output_path, job_id,resolution,negative_prompt=""):
     comfy_process = await start_comfyui()
     await asyncio.sleep(15)  # đợi server ComfyUI khởi động (có thể tăng nếu load model chậm)
 
@@ -637,6 +659,7 @@ async def generate_video_cmd(prompt, cond_image, cond_audio_path, output_path, j
         workflow["241"]["inputs"]["negative_prompt"] = "bright tones, overexposed, blurred details, move, head movement, subtitles, style, works, paintings, overall gray, worst quality, low quality, JPEG compression residue, ugly, incomplete, extra fingers, poorly drawn hands, poorly drawn faces, deformed, disfigured, misshapen limbs, fused fingers, still picture, messy background, three legs, many people in the background, walking backwards"
         wf_h=448
         wf_w=448
+    
         if resolution == "1:1":
             wf_w = 720
             wf_h = 720
@@ -652,7 +675,24 @@ async def generate_video_cmd(prompt, cond_image, cond_audio_path, output_path, j
         elif resolution=="720_16:9":
             wf_h = 448
             wf_w = 800
-
+        if negative_prompt!="":
+            print("tạo video type 7)))))))))")
+            workflow["241"]["inputs"]["negative_prompt"] = negative_prompt
+            if resolution == "1:1":
+                wf_w = 640
+                wf_h = 640
+            elif resolution=="16:9":    
+                wf_w = 960
+                wf_h = 544 
+            elif resolution=="9:16":
+                wf_w = 544
+                wf_h = 960
+            elif resolution=="720":
+                wf_w = 448
+                wf_h = 800
+            elif resolution=="720_16:9":
+                wf_h = 448
+                wf_w = 800
         workflow["245"]["inputs"]["value"] = wf_w
         workflow["246"]["inputs"]["value"] = wf_h
         # workflow["245"]["inputs"]["value"] = 448
@@ -795,12 +835,16 @@ from asyncio import Semaphore
 
 video_semaphore = Semaphore(2)
 
-async def generate_video_fast(prompt, cond_image, cond_audio_path, output_path, job_id, resolution, type,first_time=True,howmuch=1,index=0):
+async def generate_video_fast(prompt, cond_image, cond_audio_path, output_path, job_id, resolution, type,first_time=True,howmuch=1,index=0,howmuch1=0):
     width=720
     height=1280
+    str__kl="720x1280"
+    video_bg="/home/toan/marketing-video-ai/backgrund_vid/9_16"
     if resolution=="16:9" or resolution=="720_16:9":
         width=1280
         height=720
+        str__kl="1280x720"
+        video_bg="/home/toan/marketing-video-ai/backgrund_vid/16_9"
     elif resolution=="9:16":
         width=720
         height=1280
@@ -808,7 +852,8 @@ async def generate_video_fast(prompt, cond_image, cond_audio_path, output_path, 
         width=720
         height=720
     global image_paths_product 
-
+    global image_paths_product_rout360
+    global video_paths_product_rout360
     if len(image_paths_product)==0 or len(image_paths_product) <howmuch-1 or first_time:
         print("==========================================")
         process = None
@@ -823,8 +868,51 @@ async def generate_video_fast(prompt, cond_image, cond_audio_path, output_path, 
                             job_id=job_id,
                             input_image=cond_image
                         )
-                print(image_path)
+                # print(image_path)
                 image_paths_product.append(image_path[0])
+            video_paths_product_rout360=[]
+            image_paths_product_rout360=[]
+            for i in range(howmuch1):
+                prompt_pairs = [
+                    {
+                        "image": "Create a realistic photo of the input product placed on a small pedestal or stand in a bright white studio corner. \
+The background is pure white with soft natural light coming from one side, creating gentle shadows and realistic reflections on the surface. \
+The product should look clean, sharp, and naturally lit — as if photographed in a professional studio with a minimal setup. \
+Keep the product’s shape and texture unchanged.",
+                        "video": "Create a smooth cinematic 360-degree rotation video of the input product. The product stays centered on a clean studio background with soft lighting and realistic reflections. The camera slowly orbits around the product in a complete circle, showing all sides with natural motion and focus depth. Keep the product perfectly detailed and consistent with the input image. Use gentle motion blur and subtle shadows to make it feel realistic. The style should look like a professional product commercial shot with high-end studio lighting."
+                    },
+                    {
+                        "image": "Create a realistic image of the input product placed on a small stand or pedestal in a dark studio environment. \
+The background is deep black or dark grey, illuminated by a focused light source that highlights the product’s contours and reflections. \
+Subtle shadows and a faint rim light enhance depth and texture, giving the scene a premium professional look. \
+Keep the product realistic and unchanged, with no distortion.",
+                        "video": "Create a smooth cinematic 360-degree rotation video of the input product. The product stays centered on a clean studio background with soft lighting and realistic reflections. The camera slowly orbits around the product in a complete circle, showing all sides with natural motion and focus depth. Keep the product perfectly detailed and consistent with the input image. Use gentle motion blur and subtle shadows to make it feel realistic. The style should look like a professional product commercial shot with high-end studio lighting."
+                    },
+                    {
+                        "image": "A cinematic dark photo of the product surrounded by ice cubes and frost. The product emits a soft blue glow reflecting on nearby ice. Steam rises gently in the background. The lighting is cold and moody, emphasizing clarity and chill freshness.",
+                        "video": "A cinematic ultra-realistic slow-motion video of the product standing on an icy surface, surrounded by frost and mist. Ice cubes fall from above and scatter around the product, bouncing and sliding on the cold surface. The product emits a soft blue glow reflecting on the ice. Subtle steam rises in the background, with cold atmospheric lighting and depth of field, emphasizing clarity and chill freshness. 4K, realistic lighting, shallow depth of field, high frame rate, macro lens effect, cinematic color grading."
+                    },
+                    {
+                        "image": "Generate a premium advertisement image using the given product. Place the product on a smooth matte surface with soft smoke drifting beneath and subtle fog layers wrapping around the base. Add elegant key lighting from above and a warm rim light from behind to emphasize shape and texture. The background is minimalist with dark tones fading to light, cinematic contrast, ultra-detailed shadows, and soft reflections for a sophisticated and modern mood.",
+                        "video": "a slow-motion advertising video where the product stands on a dark matte surface. Soft smoke waves drift beneath and around it, illuminated by subtle moving light beams from the sides. The camera gently pans and tilts to highlight the product’s shape and logo. The environment feels cinematic, mysterious, and luxurious with a warm-to-cool gradient light"
+                    }
+
+                ]
+
+                selected_pair = random.choice(prompt_pairs)
+                image_prompt = selected_pair["image"]
+                video_prompt = selected_pair["video"]
+                image_path = await generate_image_with_comfyui(
+                            width=width,
+                            height=height,
+                            job_id=job_id,
+                            input_image=cond_image,
+                            prompt=image_prompt+ str(i)+" ."
+                        )
+                # print(image_path)
+                image_paths_product_rout360.append(image_path[0])
+                video_paths_product_rout360.append(video_prompt)
+
         except Exception as e:
             print(f"❌ Error creating image with ComfyUI: {e}")
             raise
@@ -868,11 +956,52 @@ async def generate_video_fast(prompt, cond_image, cond_audio_path, output_path, 
                 audio_path=cond_audio_path, 
                 output_path=output_path
             )
-    await delete_file_async(str(image_paths_product[index]))
+    elif type ==6:
+        time_videotype6=get_audio_duration(cond_audio_path)
+        async with video_semaphore:  
+            await asyncio.to_thread(
+                fairyending,
+                VIDEO_FOLDER=video_bg,
+                FONT_FOLDER="/home/toan/marketing-video-ai/font",
+                IMAGE_PATH=cond_image,
+                OUTPUT_PATH=output_path,
+                DURATION=time_videotype6,
+                FONT_SIZE=80
+            )
+    elif type ==7:
+        time_videotype6=get_audio_duration(cond_audio_path)
+        from animation.auto_motion import extend_video
+        jobid = uuid.uuid4().hex
+        filename = f"{jobid}.mp4"
+        output=await generate_video_cmd(
+                    prompt=video_paths_product_rout360[0],
+                    cond_image=image_paths_product_rout360[0],
+                    cond_audio_path="/home/toan/marketing-video-ai/directus/english_girl_3s.wav", 
+                    output_path=filename,
+                    job_id=jobid,
+                    resolution=resolution,
+                    negative_prompt="human, people, text, watermark, logo, extra object, overexposure, low-quality, distortion, blur, messy background, cartoon, unrealistic texture"
+                )
+        os.remove(image_paths_product_rout360[0])
+        video_paths_product_rout360.pop(0)
+        image_paths_product_rout360.pop(0)
+        
+        # ========================================
+        async with video_semaphore:  
+            await asyncio.to_thread(
+                extend_video,
+                input_path=filename,
+                output_path=output_path,
+                target_duration=time_videotype6,
+                mode="pingpong",
+                resolution=str__kl 
+            )
+        os.remove(filename)
+    # await delete_file_async(str(image_paths_product[index]))
     return output_path
  
 # ==========================================================================================
-async def generate_image_with_comfyui( width,height, job_id ,input_image=None):
+async def generate_image_with_comfyui( width,height, job_id ,input_image=None,prompt=None):
     # process = None
     # server_address= "127.0.0.1:8188"
     # process = await start_comfyui1()
@@ -881,14 +1010,18 @@ async def generate_image_with_comfyui( width,height, job_id ,input_image=None):
     try:
         print("🔄 Loading workflow...")
         workflow_path="/home/toan/anymateme-visualengine/workflow/Qwen IMAGE Edit 2509 Three Image Edit_api (2).json"
-        print(f"Workflow path: {workflow_path}")
+        # print(f"Workflow path: {workflow_path}")
         workflow = await load_workflow1(workflow_path)
-        print(input_image)
+        # print(input_image)
         workflow["78"]["inputs"]["image"] = input_image if input_image else "none"
+        workflow["3"]["inputs"]["steps"]=8
         
         if "111" in workflow:
-            nsdaaff=get_random_prompt()
-            workflow["111"]["inputs"]["prompt"] = nsdaaff
+            if prompt is not None:
+                workflow["111"]["inputs"]["prompt"] = prompt
+            else:
+                nsdaaff=get_random_prompt()
+                workflow["111"]["inputs"]["prompt"] = nsdaaff
             # print(nsdaaff)
             # print("||||||||||||||||||||||||||||||||||||||||||||||")
         
@@ -1030,16 +1163,16 @@ async def find_image_by_id(image_id, output_dir=str("ComfyUI/output")):
         if not files:
             print(f"🔍 No file found with id '{image_id}' in {target_dir}")
             return None
-        print("====================================")
-        print(files)
+        # print("====================================")
+        # print(files)
         t=files[0]
         files.append(t)
         # latest_file = max(files, key=os.path.getmtime)
         # print(f"📁 File found: {latest_file}")
         # return latest_file
         files_sorted = sorted(files, key=os.path.getmtime, reverse=True)
-        print(files_sorted)
-        print("====================================")
+        # print(files_sorted)
+        # print("====================================")
     
         return files_sorted[:1]
 
