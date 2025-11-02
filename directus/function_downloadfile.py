@@ -16,7 +16,7 @@ def download_image(url: str) -> str:
     return file_path
 
 def download_audio(url: str) -> str:
-    folder_path=str(BASE_DIR)+"./download_audios"
+    folder_path=str(BASE_DIR)+"/download_audios"
     os.makedirs(folder_path, exist_ok=True)
 
     filename = f"{uuid.uuid4().hex}.mp3"

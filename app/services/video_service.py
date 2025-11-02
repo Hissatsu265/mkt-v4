@@ -29,6 +29,7 @@ from app.services.img_service import get_random_prompt
 from animation.full_transition_effect import  apply_multiple_effects
 from animation.fairyending import fairyending
 image_paths_product = []
+image_path_sideface = []
 image_paths_product_rout360=[]
 video_paths_product_rout360=[]
 import cv2
@@ -132,11 +133,42 @@ async def concat_and_merge_async(job_id, results, cond_audio_path, output_path_v
 def random_transition_list(n):
     effects = [e.value for e in TransitionEffect]  # Lấy danh sách các giá trị Enum
     return [random.choice(effects) for _ in range(n)]
+def adjust_end_times(start_times, end_times, audio_end):
+    new_end_times = []
+    for i in range(len(start_times)):
+        if i < len(start_times) - 1:
+            new_end = max(start_times[i + 1] - 0.2, start_times[i])
+        else:
+            new_end = audio_end
+
+        if new_end - start_times[i] > 2:
+            new_end -= 0.8
+
+        new_end_times.append(new_end)
+    return new_end_times
+import ast
+
+def safe_parse_color(value):
+    """Chuyển string '(R, G, B)' hoặc '#HEX' về tuple RGB"""
+    if isinstance(value, tuple):
+        return value
+    if isinstance(value, str):
+        value = value.strip()
+        if value.startswith("(") and value.endswith(")"):
+            try:
+                return tuple(ast.literal_eval(value))
+            except Exception:
+                pass
+        elif value.startswith("#"):
+            h = value.lstrip("#")
+            return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
+    return (0, 0, 0)  # fallback an toàn
+
 def custom_random_sequence(n):
     if n <= 0:
         return []
 
-    nums = [1, 2, 3, 4, 5, 6, 7]
+    nums = [1, 2, 3, 5, 6, 7, 8,9]
     sequence = []
     last_seen = {num: -10 for num in nums}  # lưu vị trí xuất hiện gần nhất
     last = None
@@ -157,23 +189,27 @@ def custom_random_sequence(n):
                 if num == last:
                     continue
                 # Số 6 chỉ được xuất hiện ở vị trí n-1 hoặc n-2
-                if num == 6 and i < n - 2:
+                if num == 6 and i < n - 1:
                     continue
-                # Nếu là 1, phải cách lần trước ít nhất 4 cảnh
-                if num == 1 and i - last_seen[num] < 4:
+                # Nếu là 1 hoặc 7, phải cách lần trước ít nhất 4 cảnh
+                if num in [1, 7,9] and i - last_seen[num] < 4:
                     continue
-                if num == 7 and i - last_seen[num] < 4:
+                # Nếu là 2-6 (trừ 1 và 7), cách lần trước ít nhất 5 cảnh
+                if num not in [1, 7] and i - last_seen[num] < 5:
                     continue
-                # Nếu là 2-6, phải cách lần trước ít nhất 5 cảnh
-                if num != 1 and num != 7 and i - last_seen[num] < 5:
+                # Nếu là 2 hoặc 3, phải cách lần xuất hiện gần nhất của số còn lại ít nhất 4
+                if num == 2 and i - last_seen[3] < 4:
                     continue
+                if num == 3 and i - last_seen[2] < 4:
+                    continue
+
                 candidates.append(num)
 
             # Nếu không còn candidate hợp lệ → nới lỏng điều kiện
             if not candidates:
                 candidates = [x for x in nums if x != last]
                 # vẫn ưu tiên không chọn 6 sớm
-                if i < n - 2 and 6 in candidates:
+                if i < n - 1 and 6 in candidates:
                     candidates.remove(6)
 
             value = random.choice(candidates)
@@ -184,7 +220,65 @@ def custom_random_sequence(n):
 
     return sequence
 
-    # return [7,7,7,7,7][:n]  
+    # return [9,9,1,5][:n]
+
+def custom_random_sequence111(n):
+    if n <= 0:
+        return []
+
+    nums = [1, 5, 8,9]
+    sequence = []
+    last_seen = {num: -10 for num in nums}  # lưu vị trí xuất hiện gần nhất
+    last = None
+
+    for i in range(n):
+        # --- Quy tắc đặc biệt cho 2 cảnh đầu ---
+        if i < 2:
+            # đảm bảo trong 2 cảnh đầu có ít nhất một số 1
+            if i == 1 and 1 not in sequence:
+                value = 1
+            else:
+                candidates = [x for x in nums if x != last and x != 6]  # không chọn 6 sớm
+                value = random.choice(candidates)
+        else:
+            candidates = []
+            for num in nums:
+                # Không chọn trùng với cảnh trước
+                if num == last:
+                    continue
+                # Số 6 chỉ được xuất hiện ở vị trí n-1 hoặc n-2
+                if num == 6 and i < n - 1:
+                    continue
+                # Nếu là 1 hoặc 7, phải cách lần trước ít nhất 4 cảnh
+                if num in [1, 7,9] and i - last_seen[num] < 4:
+                    continue
+                # Nếu là 2-6 (trừ 1 và 7), cách lần trước ít nhất 5 cảnh
+                if num not in [1, 7] and i - last_seen[num] < 5:
+                    continue
+                # Nếu là 2 hoặc 3, phải cách lần xuất hiện gần nhất của số còn lại ít nhất 4
+                if num == 2 and i - last_seen[3] < 4:
+                    continue
+                if num == 3 and i - last_seen[2] < 4:
+                    continue
+
+                candidates.append(num)
+
+            # Nếu không còn candidate hợp lệ → nới lỏng điều kiện
+            if not candidates:
+                candidates = [x for x in nums if x != last]
+                # vẫn ưu tiên không chọn 6 sớm
+                if i < n - 1 and 6 in candidates:
+                    candidates.remove(6)
+
+            value = random.choice(candidates)
+
+        sequence.append(value)
+        last_seen[value] = i
+        last = value
+
+    return sequence
+
+    # return [9,9,1,5][:n]  
     # return [2,3,4,2,3,4,2,3,4,2,3,4][:n]
 
 class VideoService:
@@ -245,12 +339,19 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
 
         first_time=True
         last_value=None
-        list_random = custom_random_sequence(len(output_paths))
+        if len(cond_images)>1 and cond_images[1]!="":
+            list_random = custom_random_sequence(len(output_paths))
+        else:
+            cond_images.append(cond_images[0])
+            list_random = custom_random_sequence111(len(output_paths))
         # count = len(list(filter(lambda x: x != 1, list_random)))
-        count = len(list(filter(lambda x: x != 1 and x != 5 and x!=6, list_random)))
+        count = len(list(filter(lambda x: x ==2 or x==3, list_random)))
         count1=len(list(filter(lambda x: x ==7, list_random)))
+        count2=len(list(filter(lambda x: x ==8, list_random)))
 
         index_forimgpro=0
+        print("===========================")
+
         # ==========================================================================
         for i, output_path in enumerate(output_paths):
             await job_service.update_job_status(job_id, "processing", progress=int(i*10+10))
@@ -271,13 +372,78 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
             clip_name=os.path.join(os.getcwd(), f"{job_id}_clip_{i}.mp4")
             audiohavesecondatstart = add_silence_to_start(output_path, job_id, duration_ms=0)
             audiohavesecondatstart=str(BASE_DIR / audiohavesecondatstart)
+            print("============sgageeeee===============")
             # print("dfsdfsdfsd:   ", audiohavesecondatstart)
             # print(type(audiohavesecondatstart))
 
             # =================================================================
             current_value=0
             file_path = str(cond_images[current_value])
-            
+
+            if (list_random[i] == 9):
+
+                from animation.addtittle import create_keyword_video
+
+                from app.services.extract_keyword import process_keywordfromaudi
+
+                keywords, start_times_list, end_times_list = await asyncio.to_thread(
+                    process_keywordfromaudi, audiohavesecondatstart
+                )
+                print("==========ê======sagasgasg===========")
+                if len(keywords) <= 0:
+                    list_random[i] = 1
+                    if i + 1 < len(list_random) and list_random[i + 1] == 1:
+                        list_random[i] = 5
+                    if i - 1 >= 0 and list_random[i - 1] == 1:
+                        list_random[i] = 5 
+
+                else: 
+                    print("fsfsfsdf")
+                    font_path_hehehehe = [
+                        "/home/toan/marketing-video-ai/font/Aloevera-OVoWO.ttf",
+                        "/home/toan/marketing-video-ai/font/MontserratBlack-3zOvZ.ttf",
+                        "/home/toan/marketing-video-ai/font/MontserratBold-p781R.otf",
+                        "/home/toan/marketing-video-ai/font/PoppinsSemibold-8l8n.otf",
+                    ]
+                    print("fsfsfsdf")
+
+                    color_combos = [
+                        {"name": "Navy Blue & White", "bg": "(30, 58, 138)", "text": "#ffffff"},
+                        {"name": "Emerald Green & White", "bg": "(5, 150, 105)", "text": "#ffffff"},
+                        {"name": "Orange & Dark Gray", "bg": "(249, 115, 22)", "text": "#1f2937"},
+                        {"name": "Teal & White", "bg": "(13, 148, 136)", "text": "#ffffff"},
+                        {"name": "Sky Blue & White", "bg": "(2, 132, 199)", "text": "#ffffff"},
+                        {"name": "Magenta & White", "bg": "(192, 38, 211)", "text": "#ffffff"},
+                        {"name": "Gray & Black", "bg": "(156, 163, 175)", "text": "#000000"},
+                        {"name": "White & Black", "bg": "(255, 255, 255)", "text": "#000000"},
+                    ]
+                    
+                    time_video=get_audio_duration(audiohavesecondatstart)
+
+                    new_end_times = adjust_end_times(start_times_list, end_times_list, time_video)
+
+                    selected = random.choice(color_combos)
+
+                    font_path= random.choice(font_path_hehehehe)
+
+                    resolution_tuple =(1280,720) if resolution == "16:9" else (720,1280)
+                    bg_color = safe_parse_color(selected['bg'])
+                    # font_color = safe_parse_color(selected['text'])
+                    await asyncio.to_thread(
+                        create_keyword_video,
+                        keywords,                      # 1
+                        start_times_list,              # 2
+                        new_end_times,                 # 3
+                        time_video,                    # 4 = duration
+                        resolution_tuple,              # 5 = resolution
+                        font_path,                     # 6 = font (theo định nghĩa hàm)
+                        bg_color,                # 7 = bg_color
+                        selected['text'],              # 8 = font_color
+                        None,                          # 9 = font_size (None để tự tính)
+                        random.randint(1, 2),          # 10 = effect_type
+                        clip_name                      # 11 = output_path
+                    )
+
             if (list_random[i] == 1):
                 output=await generate_video_cmd(
                     prompt=prompts[current_value],
@@ -299,8 +465,10 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
                     resolution=resolution
                 )
                 os.remove(clip_name111)
+            elif (list_random[i] == 9):
+                print("heh")
+
             else:
-                
                 output=await generate_video_fast(
                     prompt=prompts[current_value],
                     cond_image=str(cond_images[1]),
@@ -312,17 +480,54 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
                     first_time=first_time,
                     howmuch=count,
                     index=index_forimgpro,
-                    howmuch1=count1
+                    howmuch1=count1,
+                    howmuch2=count2,
+                    avt_image=str(cond_images[0])
                 )
                 first_time=False
-                index_forimgpro+=1
+                if list_random[i]!=8 and list_random[i]!=7 and list_random[i]!=6 :
+                    index_forimgpro+=1
+            # =========================add tittle===================================
+            # from animation.addtittle import add_text_to_video
+            # from app.services.extract_keyword import process_keywordfromaudi
+
+            # keywords, start_times_list, end_times_list = await asyncio.to_thread(
+            #     process_keywordfromaudi, audiohavesecondatstart
+            # )
+            # # keywords, start_times_list, end_times_list = process_keywordfromaudi(audiohavesecondatstart)
+
+            # clip_name1=os.path.join(os.getcwd(), f"{job_id}_clip11_{i}.mp4")
+
+            # font_path_hehehehe = [
+            #     "/home/toan/marketing-video-ai/font/Aloevera-OVoWO.ttf",
+            #     "/home/toan/marketing-video-ai/font/MontserratBlack-3zOvZ.ttf",
+            #     "/home/toan/marketing-video-ai/font/MontserratBold-p781R.otf",
+            #     "/home/toan/marketing-video-ai/font/PoppinsSemibold-8l8n.otf",
+            # ]
+
+            # font_path= random.choice(font_path_hehehehe)
+            # if len(start_times_list) > 0:
+            #     y_pos = 0.4 if resolution == "16:9" else 0.68
+            #     await asyncio.to_thread(
+            #         add_text_to_video,
+            #         clip_name,
+            #         keywords,
+            #         start_times_list,
+            #         end_times_list,
+            #         font_path,
+            #         clip_name1,
+            #         True,  
+            #         2,      
+            #         y_pos  
+            #     )
+            # ================================================================
+            print(list_random,"]]]]]]]]]]]]]]]]]]]]]]]]]ư")
             trim_video_start(clip_name, duration=0.5)
             output_file=cut_video(clip_name, get_audio_duration(output_path)-0.5) 
             results.append(output_file)
             try:
-                # os.remove(pad_file)
-                # os.remove(crop_file)
                 os.remove(output_path)
+                # os.remove(clip_name1)
                 os.remove(clip_name)
                 os.remove(audiohavesecondatstart)
             except Exception as e:
@@ -436,14 +641,49 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
 
 import signal
 
+# async def start_comfyui():
+#     process = await asyncio.create_subprocess_exec(
+#         "python3", "main.py",
+#         cwd=str(BASE_DIR / "ComfyUI"),  # chỗ chứa main.py
+#         stdout=asyncio.subprocess.PIPE,
+#         stderr=asyncio.subprocess.PIPE
+#     )
+#     print("🚀 ComfyUI started (PID:", process.pid, ")")
+#     return process
+import socket
+async def wait_for_port_async(host: str, port: int, timeout: int = 60) -> bool:
+ 
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        try:
+            with socket.create_connection((host, port), timeout=2):
+                print(f"✅ ComfyUI port {port} đã sẵn sàng!")
+                return True
+        except (OSError, ConnectionRefusedError):
+            await asyncio.sleep(2)
+    print(f"❌ Hết thời gian {timeout}s mà ComfyUI vẫn chưa mở port {port}.")
+    return False
+
+
 async def start_comfyui():
+    HOST = "127.0.0.1"
+    PORT = 8188
     process = await asyncio.create_subprocess_exec(
         "python3", "main.py",
         cwd=str(BASE_DIR / "ComfyUI"),  # chỗ chứa main.py
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE
     )
-    print("🚀 ComfyUI started (PID:", process.pid, ")")
+
+    print(f"🚀 ComfyUI started (PID: {process.pid}) — đang chờ server mở port {PORT}...")
+
+    ready = await wait_for_port_async(HOST, PORT, timeout=120)
+
+    if not ready:
+        print("⚠️ ComfyUI không khởi động được đúng cách (port không mở).")
+    else:
+        print("🎉 ComfyUI sẵn sàng kết nối!")
+
     return process
 async def stop_comfyui(process):
     if process and process.returncode is None:
@@ -592,7 +832,7 @@ async def find_latest_video(prefix, output_dir=str(BASE_DIR / "ComfyUI/output"))
 # ========== Hàm chính được cập nhật ==========
 async def generate_video_cmd(prompt, cond_image, cond_audio_path, output_path, job_id,resolution,negative_prompt=""):
     comfy_process = await start_comfyui()
-    await asyncio.sleep(15)  # đợi server ComfyUI khởi động (có thể tăng nếu load model chậm)
+    # await asyncio.sleep(20)  # đợi server ComfyUI khởi động (có thể tăng nếu load model chậm)
 
     try:
         print("🔄 Loading workflow...")
@@ -664,11 +904,11 @@ async def generate_video_cmd(prompt, cond_image, cond_audio_path, output_path, j
             wf_w = 720
             wf_h = 720
         elif resolution=="16:9":    
-            wf_w = 1040
-            wf_h = 592 
+            wf_w = 1088
+            wf_h = 608
         elif resolution=="9:16":
-            wf_w = 592
-            wf_h = 1040
+            wf_w = 544
+            wf_h = 960
         elif resolution=="720":
             wf_w = 448
             wf_h = 800
@@ -835,7 +1075,7 @@ from asyncio import Semaphore
 
 video_semaphore = Semaphore(2)
 
-async def generate_video_fast(prompt, cond_image, cond_audio_path, output_path, job_id, resolution, type,first_time=True,howmuch=1,index=0,howmuch1=0):
+async def generate_video_fast(prompt, cond_image, cond_audio_path, output_path, job_id, resolution, type,first_time=True,howmuch=1,index=0,howmuch1=0,howmuch2=0,avt_image=""):
     width=720
     height=1280
     str__kl="720x1280"
@@ -854,25 +1094,30 @@ async def generate_video_fast(prompt, cond_image, cond_audio_path, output_path, 
     global image_paths_product 
     global image_paths_product_rout360
     global video_paths_product_rout360
+    global image_path_sideface
+
     if len(image_paths_product)==0 or len(image_paths_product) <howmuch-1 or first_time:
         print("==========================================")
         process = None
         server_address= "127.0.0.1:8188"
         process = await start_comfyui1()
-        await asyncio.sleep(8)
+        # await asyncio.sleep(8)
         try:
             for i in range(howmuch):
+                job_id1 = str(uuid.uuid4())
                 image_path = await generate_image_with_comfyui(
                             width=width,
                             height=height,
-                            job_id=job_id,
+                            job_id=job_id1,
                             input_image=cond_image
                         )
                 # print(image_path)
                 image_paths_product.append(image_path[0])
             video_paths_product_rout360=[]
             image_paths_product_rout360=[]
+            # =================================================
             for i in range(howmuch1):
+                job_id1 = str(uuid.uuid4())
                 prompt_pairs = [
                     {
                         "image": "Create a realistic photo of the input product placed on a small pedestal or stand in a bright white studio corner. \
@@ -905,24 +1150,43 @@ Keep the product realistic and unchanged, with no distortion.",
                 image_path = await generate_image_with_comfyui(
                             width=width,
                             height=height,
-                            job_id=job_id,
+                            job_id=job_id1,
                             input_image=cond_image,
                             prompt=image_prompt+ str(i)+" ."
                         )
                 # print(image_path)
                 image_paths_product_rout360.append(image_path[0])
                 video_paths_product_rout360.append(video_prompt)
+# ========================================================================================
+            image_path_sideface=[]
+            for i in range(howmuch2):
+
+                job_id1 = str(uuid.uuid4())
+                image_path = await generate_image_with_comfyui(
+                            width=width,
+                            height=height,
+                            job_id=job_id1,
+                            input_image=avt_image,
+                            type_sideface="sideface",
+                        )
+                
+                # print(image_path)
+                # image_path_sideface.append(image_path[0])
+                image_path_sideface.insert(0, image_path[0])
 
         except Exception as e:
             print(f"❌ Error creating image with ComfyUI: {e}")
             raise
         finally:
+            print(howmuch2)
             await stop_comfyui1(process)
 
 
     if type == 2:
         from animation.zoom_in_effect import zoom_and_light_effect
-        
+        print("===========================================")
+        print(image_paths_product)
+        print("===========================================")
         async with video_semaphore:  
             await asyncio.to_thread(
                 zoom_and_light_effect,
@@ -997,11 +1261,28 @@ Keep the product realistic and unchanged, with no distortion.",
                 resolution=str__kl 
             )
         os.remove(filename)
+    elif type ==8:
+        print("sấdasdasdasdasdasdasdasdasdasd")
+        time_videotype6=get_audio_duration(cond_audio_path)
+        jobid = uuid.uuid4().hex
+        number = random.randint(1, 1000)
+        output=await generate_video_cmd(
+                    prompt="A realistic video of a person confidently giving a lecture in front of a indoor background. The person’s face is turned to one side, maintaining that direction throughout the video without ever facing the camera directly. Their expression remains neutral and professional, with no head movement. Their hands moves slowly, naturally, and with subtle variation to emphasize their words, creating the impression of a teacher explaining a lesson.",
+                    cond_image=image_path_sideface[0],
+                    cond_audio_path=cond_audio_path, 
+                    output_path=output_path,
+                    job_id=jobid,
+                    resolution=resolution,
+                    negative_prompt="change perspective, bright tones, overexposed, static, blurred details, subtitles, style, works, paintings, images, static, overall gray, worst quality, low quality, JPEG compression residue, ugly, incomplete, extra fingers, poorly drawn hands, poorly drawn faces, deformed, disfigured, misshapen limbs, fused fingers, still picture, messy background, three legs, many people in the background, walking backwards "+str(number)
+                )
+        os.remove(image_path_sideface[0])
+        
+        image_path_sideface.pop(0)      
     # await delete_file_async(str(image_paths_product[index]))
     return output_path
  
 # ==========================================================================================
-async def generate_image_with_comfyui( width,height, job_id ,input_image=None,prompt=None):
+async def generate_image_with_comfyui( width,height, job_id ,input_image=None,prompt=None,type_sideface=None):
     # process = None
     # server_address= "127.0.0.1:8188"
     # process = await start_comfyui1()
@@ -1009,7 +1290,10 @@ async def generate_image_with_comfyui( width,height, job_id ,input_image=None,pr
     # await asyncio.sleep(8)
     try:
         print("🔄 Loading workflow...")
-        workflow_path="/home/toan/anymateme-visualengine/workflow/Qwen IMAGE Edit 2509 Three Image Edit_api (2).json"
+        if type_sideface=="sideface":
+            workflow_path="/home/toan/marketing-video-ai/workflow/Qwen+Image+Edit+Plus(2509)+Basic+Version (1)_api.json"
+        else:
+            workflow_path="/home/toan/anymateme-visualengine/workflow/Qwen IMAGE Edit 2509 Three Image Edit_api (2).json"
         # print(f"Workflow path: {workflow_path}")
         workflow = await load_workflow1(workflow_path)
         # print(input_image)
@@ -1022,15 +1306,38 @@ async def generate_image_with_comfyui( width,height, job_id ,input_image=None,pr
             else:
                 nsdaaff=get_random_prompt()
                 workflow["111"]["inputs"]["prompt"] = nsdaaff
+            if type_sideface=="sideface":
+                print("change side??????????????????????hehe")
+                workflow["111"]["inputs"]["prompt"] = "change the pose of the person to the reference image. keep the same background"
             # print(nsdaaff)
             # print("||||||||||||||||||||||||||||||||||||||||||||||")
-        
+        # ======================================================================
+        if "108" in workflow and type_sideface=="sideface":
+            image_paths_ref16_9 = [
+                "/home/toan/marketing-video-ai/sideface_image_ref/5.png",
+                "/home/toan/marketing-video-ai/sideface_image_ref/6.png"
+            ]
+            image_paths_ref9_16=[
+                "/home/toan/marketing-video-ai/sideface_image_ref/916_1.png",
+                "/home/toan/marketing-video-ai/sideface_image_ref/916_2.png"
+            ]
+            if width > height:
+                random_image = random.choice(image_paths_ref16_9)
+            else:
+                random_image = random.choice(image_paths_ref9_16)
+            workflow["108"]["inputs"]["image"] = random_image
+        # =================================================================
         if "112" in workflow:
             workflow["112"]["inputs"]["width"] = width
             workflow["112"]["inputs"]["height"] = height
         if "110" in workflow :
             workflow["110"]["inputs"]["prompt"] = "human, text, watermark, logo, extra objects, hands, people, human, low quality, blurry, distorted, messy background, overexposed, unrealistic shadows, poor lighting"
-            
+
+            if type_sideface=="sideface":
+                number = random.randint(1, 1000)
+
+                workflow["110"]["inputs"]["prompt"] = "bright tones, overexposed, blurred details, move, head movement, subtitles, style, works, paintings, overall gray, worst quality, low quality, JPEG compression residue, ugly, incomplete, extra fingers, poorly drawn hands, poorly drawn faces, deformed, disfigured, misshapen limbs, fused fingers, still picture, messy background, three legs "+str(number)
+
         prefix = f"{job_id}/{job_id}"
         if "60" in workflow:
             workflow["60"]["inputs"]["filename_prefix"] = prefix
@@ -1043,7 +1350,6 @@ async def generate_image_with_comfyui( width,height, job_id ,input_image=None,pr
         print(f"✅ Workflow sent! Prompt ID: {prompt_id}")
         
         success = await wait_for_completion1(prompt_id, client_id, server_address)
-        
         if not success:
             print("❌ Workflow Failed")
             return None
@@ -1186,9 +1492,9 @@ from pathlib import Path
 
 # ====== HÀM KHỞI CHẠY / TẮT COMFYUI ======
 async def start_comfyui1():
+    HOST = "127.0.0.1"
+    PORT = 8188
     COMFYUI_DIR = "/home/toan/anymateme-visualengine/ComfyUI"
-
-    print(COMFYUI_DIR)
     process = await asyncio.create_subprocess_exec(
         "python3", "main.py",
         cwd=str(COMFYUI_DIR),
@@ -1196,6 +1502,13 @@ async def start_comfyui1():
         stderr=asyncio.subprocess.PIPE
     )
     print(f"🚀 ComfyUI started (PID: {process.pid})")
+    ready = await wait_for_port_async(HOST, PORT, timeout=120)
+
+    if not ready:
+        print("⚠️ ComfyUI không khởi động được đúng cách (port không mở).")
+    else:
+        print("🎉 ComfyUI sẵn sàng kết nối!")
+
     return process
 
 async def stop_comfyui1(process):

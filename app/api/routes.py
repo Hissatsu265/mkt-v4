@@ -92,20 +92,14 @@ async def create_video(request: VideoCreateRequest):
         )
 
     try:
-        # Tải ảnh và audio từ URL về local tạm
-        # local_images = []
-        # for img_url in request.image_paths:
-        #     local_images.append(download_image(img_url))
-
-        # local_audio = download_audio(request.audio_path)
-        # Tải ảnh và thay thế trực tiếp vào request.image_paths
+   
         request.image_paths = [
-            download_image(img_url) for img_url in request.image_paths
+            # download_image(img_url) for img_url in request.image_paths
+            img_url for img_url in request.image_paths
         ]
-        request.audio_path = download_audio(request.audio_path)
-        # print("Downloaded images:", request.image_paths)
-        # print("s====================s")
-        # print("Downloaded audio:", request.audio_path)
+        # request.audio_path = download_audio(request.audio_path)
+        request.audio_path = request.audio_path
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -113,13 +107,11 @@ async def create_video(request: VideoCreateRequest):
         )
 
     try:
-        # Tạo job với path local đã tải
         job_id = await job_service.create_job(
             image_paths=request.image_paths,
             prompts=request.prompts,
             audio_path=request.audio_path,
             resolution=request.resolution
-            # background=request.background
         )
 
         queue_info = await job_service.get_queue_info()

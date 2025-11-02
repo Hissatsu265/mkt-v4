@@ -3,6 +3,7 @@ import json
 import uuid
 import os
 import psutil
+from directus.function_downloadfile import download_image,download_audio
 
 from datetime import datetime, timedelta
 from typing import Dict, Any
@@ -12,6 +13,22 @@ from app.models.schemas import JobStatus
 from typing import Dict, Any, List
 from app.models.mongodb import mongodb
 from app.services.job_repository import job_repository
+import asyncio
+
+async def download_assets(job_data):
+    image_tasks = [
+        asyncio.to_thread(download_image, img_url)
+        for img_url in job_data["image_paths"]
+    ]
+    audio_task = asyncio.to_thread(download_audio, job_data["audio_path"])
+
+    results = await asyncio.gather(*image_tasks, audio_task)
+
+    images_pathdown = results[:-1]
+    audio_path_down = results[-1]
+
+    return images_pathdown, audio_path_down
+
 class JobService:
     def __init__(self):
         self.redis_client = None
@@ -346,7 +363,10 @@ class JobService:
                 # Lấy job từ queue
                 job_data = await self.job_queue.get()
                 job_id = job_data["job_id"]
-                
+                # ==========================================
+                print("download image=======================")
+                images_pathdown, audio_path_down = await download_assets(job_data)
+                # ========================================
                 print(f"Processing job: {job_id}")
                 
                 async with self.video_processing_lock:
@@ -362,9 +382,9 @@ class JobService:
                     try:
                         print(f"Creating video for job: {job_id}")
                         video_path, list_scene = await video_service.create_video(
-                            image_paths=job_data["image_paths"],
+                            image_paths=images_pathdown,
                             prompts=job_data["prompts"],
-                            audio_path=job_data["audio_path"],
+                            audio_path=audio_path_down,
                             resolution=job_data["resolution"],
                             job_id=job_id
                         )
