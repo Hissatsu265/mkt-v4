@@ -10,7 +10,7 @@ def calculate_font_size(resolution):
     aspect_ratio = w / h
     
     if aspect_ratio > 1:  # 16:9 (landscape)
-        base_size = min(w, h) // 7  # Tăng lên để chữ to hơn nữa
+        base_size = min(w, h) // 7
     else:  # 9:16 (portrait)
         base_size = w // 8
     
@@ -19,24 +19,142 @@ def calculate_font_size(resolution):
 
 # Bảng màu đẹp cho video
 COLOR_SCHEMES = [
-    {"bg": (10, 20, 40), "text": "white"},           # Xanh đậm + trắng
-    {"bg": (25, 25, 25), "text": "#FFD700"},         # Xám đen + vàng gold
-    {"bg": (40, 10, 30), "text": "#FF69B4"},         # Tím đậm + hồng
-    {"bg": (15, 35, 50), "text": "#00D9FF"},         # Xanh dương + cyan
-    {"bg": (50, 20, 0), "text": "#FFAA00"},          # Nâu đậm + cam
-    {"bg": (20, 40, 20), "text": "#7FFF00"},         # Xanh lá đậm + xanh neon
-    {"bg": (45, 15, 45), "text": "#FF1493"},         # Tím hồng + đỏ hồng
-    {"bg": (5, 25, 45), "text": "#FFFFFF"},          # Xanh navy + trắng
-    {"bg": (30, 10, 10), "text": "#FF6B6B"},         # Đỏ đậm + đỏ pastel
-    {"bg": (15, 30, 40), "text": "#FFE66D"},         # Xanh lam + vàng nhạt
+    {"bg": (10, 20, 40), "text": "white"},
+    {"bg": (25, 25, 25), "text": "#FFD700"},
+    {"bg": (40, 10, 30), "text": "#FF69B4"},
+    {"bg": (15, 35, 50), "text": "#00D9FF"},
+    {"bg": (50, 20, 0), "text": "#FFAA00"},
+    {"bg": (20, 40, 20), "text": "#7FFF00"},
+    {"bg": (45, 15, 45), "text": "#FF1493"},
+    {"bg": (5, 25, 45), "text": "#FFFFFF"},
+    {"bg": (30, 10, 10), "text": "#FF6B6B"},
+    {"bg": (15, 30, 40), "text": "#FFE66D"},
 ]
 
 
 def create_text_image(keyword, font_path, font_size, color, max_width, add_shadow=True, shadow_offset=3):
-    """Tạo ảnh text với shadow cho hiệu ứng đẹp hơn"""
-    font = ImageFont.truetype(font_path, font_size)
+    """Tạo ảnh text với shadow và anti-aliasing cao cấp"""
+    # Tăng độ phân giải gấp 2 để render mượt hơn
+    scale = 2
+    font = ImageFont.truetype(font_path, font_size * scale)
     lines = []
     words = keyword.split(" ")
+    line = ""
+    
+    for word in words:
+        test_line = line + word + " "
+        bbox = font.getbbox(test_line)
+        w = bbox[2] - bbox[0]
+        if w <= (max_width - 100) * scale:
+            line = test_line
+        else:
+            if line:
+                lines.append(line.strip())
+            line = word + " "
+    if line:
+        lines.append(line.strip())
+
+    line_height = int(font_size * 1.3 * scale)
+    padding = 20 * scale
+    img_height = len(lines) * line_height + padding * 2
+    img_width = max_width * scale
+    
+    # Tạo ảnh với độ phân giải cao hơn
+    img = Image.new("RGBA", (img_width, img_height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+
+    y = padding
+    for line in lines:
+        bbox = font.getbbox(line)
+        w = bbox[2] - bbox[0]
+        x = (img_width - w) / 2
+        
+        if add_shadow:
+            shadow_color = (0, 0, 0, 180)
+            draw.text((x + shadow_offset * scale, y + shadow_offset * scale), line, font=font, fill=shadow_color)
+        
+        draw.text((x, y), line, font=font, fill=color)
+        y += line_height
+
+    # Resize về kích thước gốc với LANCZOS filter (chất lượng cao nhất)
+    img = img.resize((max_width, img_height // scale), Image.Resampling.LANCZOS)
+    return np.array(img)
+
+
+def create_text_image_word_mask(full_text, visible_words_count, font_path, font_size, color, max_width, add_shadow=True, shadow_offset=3):
+    """
+    Tạo ảnh text với TOÀN BỘ câu, nhưng chỉ hiện một số từ đầu tiên
+    Các từ còn lại hoàn toàn trong suốt (alpha=0)
+    """
+    font = ImageFont.truetype(font_path, font_size)
+    words = full_text.split()
+    
+    # Chia thành dòng như cũ
+    lines = []
+    line = ""
+    for word in words:
+        test_line = line + word + " "
+        bbox = font.getbbox(test_line)
+        w = bbox[2] - bbox[0]
+        if w <= max_width - 100:
+            line = test_line
+        else:
+            if line:
+                lines.append(line.strip())
+            line = word + " "
+    if line:
+        lines.append(line.strip())
+
+    line_height = int(font_size * 1.3)
+    padding = 20
+    img_height = len(lines) * line_height + padding * 2
+    img_width = max_width
+    
+    img = Image.new("RGBA", (img_width, img_height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+
+    # Đếm số từ đã vẽ
+    word_count = 0
+    y = padding
+    
+    for line in lines:
+        bbox = font.getbbox(line)
+        line_width = bbox[2] - bbox[0]
+        x = (img_width - line_width) / 2
+        
+        # Vẽ từng từ trong dòng
+        line_words = line.split()
+        current_x = x
+        
+        for word in line_words:
+            word_count += 1
+            
+            # Chỉ hiện từ nếu nằm trong số từ được phép hiển thị
+            if word_count <= visible_words_count:
+                if add_shadow:
+                    shadow_color = (0, 0, 0, 180)
+                    draw.text((current_x + shadow_offset, y + shadow_offset), word, font=font, fill=shadow_color)
+                draw.text((current_x, y), word, font=font, fill=color)
+            
+            # Tính vị trí cho từ tiếp theo
+            word_bbox = font.getbbox(word + " ")
+            current_x += word_bbox[2] - word_bbox[0]
+        
+        y += line_height
+
+    return np.array(img)
+
+
+def create_text_image_char_mask(full_text, visible_chars_count, font_path, font_size, color, max_width, add_shadow=True, shadow_offset=3):
+    """
+    Tạo ảnh text với TOÀN BỘ câu, nhưng chỉ hiện một số ký tự đầu tiên
+    Các ký tự còn lại hoàn toàn trong suốt (alpha=0)
+    """
+    font = ImageFont.truetype(font_path, font_size)
+    
+    # Chia thành dòng
+    lines = []
+    words = full_text.split(" ")
     line = ""
     
     for word in words:
@@ -52,30 +170,120 @@ def create_text_image(keyword, font_path, font_size, color, max_width, add_shado
     if line:
         lines.append(line.strip())
 
-    # Tính kích thước ảnh
     line_height = int(font_size * 1.3)
     padding = 20
     img_height = len(lines) * line_height + padding * 2
     img_width = max_width
     
-    # Tạo ảnh với shadow
     img = Image.new("RGBA", (img_width, img_height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
+    # Đếm số ký tự đã vẽ
+    char_count = 0
     y = padding
+    
     for line in lines:
         bbox = font.getbbox(line)
-        w = bbox[2] - bbox[0]
-        x = (img_width - w) / 2
+        line_width = bbox[2] - bbox[0]
+        x = (img_width - line_width) / 2
         
-        if add_shadow:
-            shadow_color = (0, 0, 0, 180)
-            draw.text((x + shadow_offset, y + shadow_offset), line, font=font, fill=shadow_color)
+        # Vẽ từng ký tự trong dòng
+        current_x = x
         
-        draw.text((x, y), line, font=font, fill=color)
+        for char in line:
+            char_count += 1
+            
+            # Chỉ hiện ký tự nếu nằm trong số ký tự được phép hiển thị
+            if char_count <= visible_chars_count:
+                if add_shadow:
+                    shadow_color = (0, 0, 0, 180)
+                    draw.text((current_x + shadow_offset, y + shadow_offset), char, font=font, fill=shadow_color)
+                draw.text((current_x, y), char, font=font, fill=color)
+            
+            # Tính vị trí cho ký tự tiếp theo
+            char_bbox = font.getbbox(char)
+            current_x += char_bbox[2] - char_bbox[0]
+        
         y += line_height
 
     return np.array(img)
+
+
+def create_text_clip_word_reveal(keyword, start, end, font, font_size, color, w, h):
+    """
+    Hiệu ứng word reveal: text CỐ ĐỊNH vị trí, từ từ hiển thị từng từ
+    """
+    duration = end - start
+    words = keyword.split()
+    
+    if len(words) == 0:
+        return []
+    
+    # Tốc độ nhanh hơn: 0.15 thay vì 0.3
+    word_duration = max(0.08, (duration / len(words)) * 0.15)
+    clips = []
+    
+    # Tạo frame cho mỗi trạng thái hiển thị (1 từ, 2 từ, 3 từ...)
+    for i in range(1, len(words) + 1):
+        frame_start = start + (i - 1) * word_duration
+        
+        # Tạo ảnh với i từ đầu tiên hiển thị, các từ còn lại ẩn
+        img_array = create_text_image_word_mask(keyword, i, font, font_size, color, max_width=w - 100)
+        frame_clip = (ImageClip(img_array)
+                      .set_start(frame_start)
+                      .set_duration(word_duration)
+                      .set_position("center"))
+        clips.append(frame_clip)
+    
+    # Giữ text hoàn chỉnh đến hết
+    final_start = start + len(words) * word_duration
+    if final_start < end:
+        final_img = create_text_image(keyword, font, font_size, color, max_width=w - 100)
+        final_clip = (ImageClip(final_img)
+                     .set_start(final_start)
+                     .set_duration(end - final_start)
+                     .set_position("center"))
+        clips.append(final_clip)
+    
+    return clips
+
+
+def create_text_clip_char_reveal(keyword, start, end, font, font_size, color, w, h):
+    """
+    Hiệu ứng char reveal: text CỐ ĐỊNH vị trí, từ từ hiển thị từng ký tự
+    """
+    duration = end - start
+    
+    if len(keyword) == 0:
+        return []
+    
+    # Tốc độ hiển thị: chia đều thời gian cho mỗi ký tự
+    char_duration = max(0.03, (duration / len(keyword)) * 0.4)
+    clips = []
+    
+    # Tạo frame cho mỗi trạng thái hiển thị (1 char, 2 chars, 3 chars...)
+    for i in range(1, len(keyword) + 1):
+        frame_start = start + (i - 1) * char_duration
+        
+        # Tạo ảnh với i ký tự đầu tiên hiển thị, các ký tự còn lại ẩn
+        img_array = create_text_image_char_mask(keyword, i, font, font_size, color, max_width=w - 100)
+        frame_clip = (ImageClip(img_array)
+                      .set_start(frame_start)
+                      .set_duration(char_duration)
+                      .set_position("center"))
+        clips.append(frame_clip)
+    
+    # Giữ text hoàn chỉnh đến hết
+    final_start = start + len(keyword) * char_duration
+    if final_start < end:
+        final_img = create_text_image(keyword, font, font_size, color, max_width=w - 100)
+        final_clip = (ImageClip(final_img)
+                     .set_start(final_start)
+                     .set_duration(end - final_start)
+                     .set_position("center"))
+        clips.append(final_clip)
+    
+    return clips
 
 
 def create_text_clip_typewriter(keyword, start, end, font, font_size, color, w, h):
@@ -94,7 +302,6 @@ def create_text_clip_typewriter(keyword, start, end, font, font_size, color, w, 
         frame_start = start + (i - 1) * char_duration
         frame_end = start + i * char_duration
 
-        # Tạo frame với text hiện tại
         img_array = create_text_image(visible_text, font, font_size, color, max_width=w - 100)
         frame_clip = (ImageClip(img_array)
                       .set_start(frame_start)
@@ -109,22 +316,25 @@ def create_text_clip(keyword, start, end, font, font_size, color, w, h, effect_t
     """Tạo text clip với các hiệu ứng được chọn"""
     duration = end - start
 
-    # Hiệu ứng typewriter trả về list clips
     if effect_type == 4:
         return create_text_clip_typewriter(keyword, start, end, font, font_size, color, w, h)
+    
+    if effect_type == 5:
+        return create_text_clip_word_reveal(keyword, start, end, font, font_size, color, w, h)
+    
+    if effect_type == 6:
+        return create_text_clip_char_reveal(keyword, start, end, font, font_size, color, w, h)
 
-    # Tạo ảnh text
     img_array = create_text_image(keyword, font, font_size, color, max_width=w - 100)
     txt_clip = ImageClip(img_array).set_duration(duration)
 
-    # Áp dụng hiệu ứng
-    if effect_type == 1:  # Fade in/out mượt mà
+    if effect_type == 1:
         txt_clip = (txt_clip
                     .set_start(start)
                     .crossfadein(0.6)
                     .crossfadeout(0.6))
     
-    elif effect_type == 2:  # Zoom in + fade
+    elif effect_type == 2:
         def zoom_effect(t):
             progress = min(t / 0.6, 1)
             return 0.3 + 0.7 * (1 - (1 - progress) ** 2)
@@ -134,7 +344,7 @@ def create_text_clip(keyword, start, end, font, font_size, color, w, h, effect_t
                     .crossfadein(0.6)
                     .crossfadeout(0.6))
     
-    elif effect_type == 3:  # Bounce in
+    elif effect_type == 3:
         def bounce_in(t):
             progress = min(t / 0.7, 1)
             if progress < 0.7:
@@ -148,7 +358,7 @@ def create_text_clip(keyword, start, end, font, font_size, color, w, h, effect_t
                     .resize(bounce_in)
                     .crossfadeout(0.5))
     
-    else:  # Mặc định: fade đơn giản
+    else:
         txt_clip = txt_clip.set_start(start).crossfadein(0.4).crossfadeout(0.4)
 
     txt_clip = txt_clip.set_position("center")
@@ -164,87 +374,52 @@ def create_keyword_video(
 
     w, h = resolution
     
-    # Random color scheme nếu không được cung cấp
     if bg_color is None or font_color is None:
         color_scheme = random.choice(COLOR_SCHEMES)
         bg_color = color_scheme["bg"]
         font_color = color_scheme["text"]
     
-    # Tự động tính font size nếu không được cung cấp
     if font_size is None:
         font_size = calculate_font_size(resolution)
     
-    # Random effect nếu không được cung cấp (chỉ 1 loại cho cả video)
     if effect_type is None:
-        effect_type = random.randint(1, 4)
+        effect_type = random.randint(1, 6)
     
-    # Tạo background
     bg_clip = ColorClip(size=resolution, color=bg_color, duration=duration)
     
     clips = []
     
     for i, (kw, st, et) in enumerate(zip(keywords, start_times, end_times)):
-        # Tạo text clips (có thể là list cho typewriter effect)
         text_clips = create_text_clip(kw, st, et, font, font_size, font_color, w, h, effect_type)
         clips.extend(text_clips)
     
-    # Composite tất cả clips
     final_clip = CompositeVideoClip([bg_clip] + clips)
     final_clip.write_videofile(output_path, fps=30, codec="libx264", audio=False, threads=4)
     
-    effect_names = {1: "Fade", 2: "Zoom", 3: "Bounce", 4: "Typewriter"}
+    effect_names = {1: "Fade", 2: "Zoom", 3: "Bounce", 4: "Typewriter", 5: "Word Reveal", 6: "Char Reveal"}
     print(f"✅ Video đã được tạo: {output_path}")
     print(f"🎨 Màu nền: {bg_color}, Màu chữ: {font_color}")
     print(f"✨ Hiệu ứng: {effect_names.get(effect_type, 'Unknown')}")
 
 
-# ======================
-# 🎬 VÍ DỤ SỬ DỤNG
-# ======================
+# # ======================
+# # 🎬 VÍ DỤ SỬ DỤNG
+# # ======================
 
-# Ví dụ 1: Video 16:9 với màu và hiệu ứng random
-# keywords_16_9 = ["Xin chào", "Video 16:9", "Hiệu ứng đẹp mắt", "Cảm ơn!"]
-# start_times = [0, 2.5, 5, 8]
-# end_times = [2.5, 5, 8, 11]
+# # Test effect type 6 - Char Reveal
+# keywords = ["Xin chào các bạn", "Hiệu ứng từng chữ", "Mượt mà và đẹp"]
+# start_times = [0, 3, 6]
+# end_times = [3, 6, 9]
 
 # create_keyword_video(
-#     keywords_16_9,
+#     keywords,
 #     start_times,
 #     end_times,
-#     duration=12,
-#     resolution=(1280, 720),  # 16:9
-#     font="/content/PoppinsSemibold-8l8n.otf",
-#     effect_type=4,
-#     # bg_color và font_color để None để random màu
-#     output_path="video_16_9.mp4"
-# )
-
-# # Ví dụ 2: Video 9:16 với hiệu ứng Typewriter
-# keywords_9_16 = ["Chào mừng", "Video dọc 9:16", "Phù hợp TikTok", "Instagram Reels"]
-# start_times = [1, 3, 6, 9]
-# end_times = [3, 6, 9, 12]
-
-# create_keyword_video(
-#     keywords_9_16,
-#     start_times,
-#     end_times,
-#     duration=13,
-#     resolution=(720, 1280),  # 9:16
-#     font="/content/PoppinsSemibold-8l8n.otf",
-#     effect_type=2,  # 1: Fade, 2: Zoom, 3: Bounce, 4: Typewriter
-#     output_path="video_9_16.mp4"
-# )
-
-# # Ví dụ 3: Tự chọn màu cụ thể
-# create_keyword_video(
-#     ["Text của bạn","sdfs","lfldfkgkfdmf"],
-#     [0,5,8],
-#     [5,8,9],
-#     duration=10,
-#     resolution=(1280, 720),
-#     bg_color=(30, 58, 138),      # Xanh đậm
-#     font_color="#FFFFFF",
-#     font="/content/PoppinsSemibold-8l8n.otf",
-#     effect_type=1,              # Bounce
-#     output_path="custom_colors.mp4"
+#     duration=9.67,
+#     resolution=(720, 1280),
+#     bg_color=(209, 213, 219),
+#     font_color="#000000",
+#     font="/content/MontserratMedium-lgZ6e.otf",
+#     effect_type=5,  # Effect Type 6 - Char Reveal
+#     output_path="char_reveal_demo.mp4"
 # )

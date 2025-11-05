@@ -4,7 +4,7 @@ import uuid
 from config import BASE_DIR
 def download_image(url: str) -> str:
     folder_path=str(BASE_DIR)+"/download_images"
-
+    print("1230000000")
     os.makedirs(folder_path, exist_ok=True)
     filename = f"{uuid.uuid4().hex}.jpg"
     file_path = os.path.join(folder_path, filename)
@@ -12,19 +12,19 @@ def download_image(url: str) -> str:
     response.raise_for_status()  
     with open(file_path, "wb") as f:
         f.write(response.content)
-
+    print("123333333")
     return file_path
 
 def download_audio(url: str) -> str:
     folder_path=str(BASE_DIR)+"/download_audios"
     os.makedirs(folder_path, exist_ok=True)
-
+    print("1222222223")
     filename = f"{uuid.uuid4().hex}.mp3"
     file_path = os.path.join(folder_path, filename)
 
     response = requests.get(url)
     response.raise_for_status()  
-
+    print("11111111123")
     # Lưu file
     with open(file_path, "wb") as f:
         f.write(response.content)

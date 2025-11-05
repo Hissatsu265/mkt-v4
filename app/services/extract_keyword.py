@@ -111,6 +111,23 @@ class AudioKeywordExtractor:
         
         return timeline
     
+    def get_audio_duration(self, segments: List[Dict]) -> float:
+        """
+        Tính tổng độ dài audio từ segments
+        
+        Args:
+            segments: Danh sách segments từ subtitle
+            
+        Returns:
+            Độ dài audio (giây)
+        """
+        if not segments:
+            return 0.0
+        
+        # Lấy thời gian kết thúc của segment cuối cùng
+        last_segment = segments[-1]
+        return last_segment.get('end', 0.0)
+    
     def process_audio(
         self, 
         audio_path: str, 
@@ -123,9 +140,30 @@ class AudioKeywordExtractor:
             segments = subtitle_data.get('segments', [])
             full_text = ' '.join([seg['text'] for seg in segments])
             
+            # Tính độ dài audio
+            audio_duration = self.get_audio_duration(segments)
+            
             print(f"✅ Đã tạo subtitles: {subtitle_data.get('total_segments')} segments")
+            print(f"⏱️  Độ dài audio: {audio_duration:.2f}s")
             print(f"📄 Text: {full_text}\n")
             
+            # Nếu audio < 4s, lấy mỗi segment làm 1 keyword
+            if audio_duration < 4.0:
+                print("⚡ Audio ngắn hơn 4s → Lấy mỗi segment làm keyword")
+                keywords = []
+                start_times_list = []
+                end_times_list = []
+                
+                for segment in segments:
+                    # Lấy text của segment làm keyword
+                    keywords.append(segment['text'].strip())
+                    # Lấy thời gian bắt đầu và kết thúc của segment
+                    start_times_list.append([segment['start']])
+                    end_times_list.append([segment['end']])
+                
+                return keywords, start_times_list, end_times_list
+            
+            # Xử lý bình thường với audio >= 4s
             print("🔍 Đang trích xuất keywords...")
             keyword_data = self.extract_keywords(full_text)
             keywords = keyword_data.get('keywords', [])
@@ -157,9 +195,9 @@ class AudioKeywordExtractor:
 
 
 def process_keywordfromaudi(audio_path):
-    AUDIO_FILE =audio_path
+    AUDIO_FILE = audio_path
     extractor = AudioKeywordExtractor(os.getenv("AUTH_TOKEN"))
-    
+
     try:
         keywords, start_times, end_times = extractor.process_audio(AUDIO_FILE) 
         combined = []
@@ -170,7 +208,7 @@ def process_keywordfromaudi(audio_path):
                 for s, e in zip(starts, ends):
                     combined.append((kw, s, e))
 
-        # Bước 2: sắp xếp giảm dần theo start time
+        # Bước 2: sắp xếp tăng dần theo start time
         combined.sort(key=lambda x: x[1])
 
         # Bước 3: tách lại thành 3 mảng 1 chiều
@@ -178,14 +216,10 @@ def process_keywordfromaudi(audio_path):
         sorted_starts = [x[1] for x in combined]
         sorted_ends = [x[2] for x in combined]
 
-        # print("📋 Kết quả:")
-        # print("keywords =", sorted_keywords)
-        # print("start_times =", sorted_starts)
-        # print("end_times =", sorted_ends)  
-        return   sorted_keywords, sorted_starts,sorted_ends
+        return sorted_keywords, sorted_starts, sorted_ends
     except Exception as e:
         print(f"❌ Lỗi: {e}")
-        return [],[],[]
+        return [], [], []
 # k,s,e= process_keywordfromaudi("/home/toan/marketing-video-ai./download_audios/1a44673228584f8b9877bcf6ff8bec88.mp3")
 # print(k)
 # print(s)

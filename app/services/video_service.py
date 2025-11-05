@@ -29,7 +29,7 @@ from app.services.img_service import get_random_prompt
 from animation.full_transition_effect import  apply_multiple_effects
 from animation.fairyending import fairyending
 image_paths_product = []
-image_path_sideface = []
+image_path_sideface = [] 
 image_paths_product_rout360=[]
 video_paths_product_rout360=[]
 import cv2
@@ -163,64 +163,82 @@ def safe_parse_color(value):
             h = value.lstrip("#")
             return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
     return (0, 0, 0)  # fallback an toàn
-
-def custom_random_sequence(n):
-    if n <= 0:
-        return []
-
-    nums = [1, 2, 3, 5, 6, 7, 8,9]
+# =================================================
+def generate_valid_sequence(length=10):
+    nums = [1, 2, 3, 5, 7, 8, 9, 6]
     sequence = []
-    last_seen = {num: -10 for num in nums}  # lưu vị trí xuất hiện gần nhất
-    last = None
+    last_seen = {num: -10 for num in nums}
 
-    for i in range(n):
-        # --- Quy tắc đặc biệt cho 2 cảnh đầu ---
-        if i < 2:
-            # đảm bảo trong 2 cảnh đầu có ít nhất một số 1
-            if i == 1 and 1 not in sequence:
-                value = 1
-            else:
-                candidates = [x for x in nums if x != last and x != 6]  # không chọn 6 sớm
-                value = random.choice(candidates)
+    for i in range(length):
+        candidates = []
+
+        for num in nums:
+            # 🔹 1. 4 cảnh đầu chỉ dùng [1,9,8,7]
+            if i < 4 and num not in [1, 9, 8, 7]:
+                continue
+            # 🔹 2. Số 6 chỉ được xuất hiện ở cuối
+            if num == 6 and i != length - 1:
+                continue
+            # 🔹 3. Không trùng với cảnh trước
+            if i > 0 and num == sequence[-1]:
+                continue
+            # 🔹 4. 2 và 3 cách nhau ít nhất 6 cảnh
+            if num == 2 and i - last_seen[3] < 6:
+                continue
+            if num == 3 and i - last_seen[2] < 6:
+                continue
+            # 🔹 5. Mỗi số chỉ được lặp lại sau ít nhất 6 cảnh
+            if i - last_seen[num] < 6:
+                continue
+
+            candidates.append(num)
+
+        # 🔸 Nếu là cảnh thứ 2 mà chưa có 1 → bắt buộc chọn 1
+        if i == 1 and 1 not in sequence:
+            value = 1
         else:
-            candidates = []
-            for num in nums:
-                # Không chọn trùng với cảnh trước
-                if num == last:
-                    continue
-                # Số 6 chỉ được xuất hiện ở vị trí n-1 hoặc n-2
-                if num == 6 and i < n - 1:
-                    continue
-                # Nếu là 1 hoặc 7, phải cách lần trước ít nhất 4 cảnh
-                if num in [1, 7,9] and i - last_seen[num] < 4:
-                    continue
-                # Nếu là 2-6 (trừ 1 và 7), cách lần trước ít nhất 5 cảnh
-                if num not in [1, 7] and i - last_seen[num] < 5:
-                    continue
-                # Nếu là 2 hoặc 3, phải cách lần xuất hiện gần nhất của số còn lại ít nhất 4
-                if num == 2 and i - last_seen[3] < 4:
-                    continue
-                if num == 3 and i - last_seen[2] < 4:
-                    continue
-
-                candidates.append(num)
-
-            # Nếu không còn candidate hợp lệ → nới lỏng điều kiện
             if not candidates:
-                candidates = [x for x in nums if x != last]
-                # vẫn ưu tiên không chọn 6 sớm
-                if i < n - 1 and 6 in candidates:
-                    candidates.remove(6)
-
+                return None
             value = random.choice(candidates)
 
         sequence.append(value)
         last_seen[value] = i
-        last = value
+
+    # 🔹 6. Đảm bảo số 1 có trong 2 cảnh đầu
+    if 1 not in sequence[:2]:
+        return None
 
     return sequence
 
-    # return [9,9,1,5][:n]
+
+def generate_presets(count=10, length=10):
+    presets = []
+    attempts = 0
+    while len(presets) < count and attempts < 1000:
+        seq = generate_valid_sequence(length)
+        attempts += 1
+        if seq and seq not in presets:
+            presets.append(seq)
+    return presets
+
+
+def custom_random_sequence(n):
+    # preset_sequences = generate_presets(count=5, length=max(10, n))
+    # chosen_sequence = random.choice(preset_sequences)
+    # return chosen_sequence[:n]
+    # ===============tà đạo===========================
+    presets = [
+        [1, 8, 5, 9, 1, 7, 2],
+        [1, 8, 9, 5, 7, 1, 6],
+        [1, 5, 7, 8, 9, 1, 3]
+    ]
+    arr = random.choice(presets)
+    result = []
+    while len(result) < n:
+        result.extend(arr)
+    return result[:n]
+    # return [9,9,9,1,1,1][:n]
+# ====================================================
 
 def custom_random_sequence111(n):
     if n <= 0:
@@ -313,7 +331,7 @@ class VideoService:
             if path_directus is not None and output_path.exists() :
                 print(f"Video upload successfully: {path_directus}")
                 print(f"Job ID: {job_id}, Output Path: {path_directus}")
-                os.remove(str(output_path))
+                # os.remove(str(output_path))
                 return str(path_directus),list_scene
             else:
                 if not output_path.exists():
@@ -330,7 +348,7 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
     list_scene=[]
     if prompts[0]=="" or prompts[0] is None or prompts[0].lower() == "none":
         prompts[0]="A realistic video of a person confidently presenting a product they are holding. The person speaks clearly and professionally, as if explaining the product’s features in an advertisement. Their facial expression remains pleasant and natural, with slight movements to appear engaging but not exaggerated. Their hand gestures are smooth and minimal, focusing attention on the product, creating the impression of a calm and confident presenter in a product promotion video."
-    if get_audio_duration(cond_audio_path) > 12:
+    if get_audio_duration(cond_audio_path) > 9:
         output_directory = "output_segments"
         os.makedirs(output_directory, exist_ok=True)
         output_paths,durations, result = process_audio_file(cond_audio_path, output_directory)
@@ -377,7 +395,7 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
             # print(type(audiohavesecondatstart))
 
             # =================================================================
-            current_value=0
+            current_value=0 
             file_path = str(cond_images[current_value])
 
             if (list_random[i] == 9):
@@ -386,10 +404,11 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
 
                 from app.services.extract_keyword import process_keywordfromaudi
 
-                keywords, start_times_list, end_times_list = await asyncio.to_thread(
+                keywords, start_times_list1, end_times_list = await asyncio.to_thread(
                     process_keywordfromaudi, audiohavesecondatstart
                 )
-                print("==========ê======sagasgasg===========")
+                start_times_list = [max(0, t - 0.4) for t in start_times_list1]
+
                 if len(keywords) <= 0:
                     list_random[i] = 1
                     if i + 1 < len(list_random) and list_random[i + 1] == 1:
@@ -398,24 +417,16 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
                         list_random[i] = 5 
 
                 else: 
-                    print("fsfsfsdf")
                     font_path_hehehehe = [
-                        "/home/toan/marketing-video-ai/font/Aloevera-OVoWO.ttf",
-                        "/home/toan/marketing-video-ai/font/MontserratBlack-3zOvZ.ttf",
-                        "/home/toan/marketing-video-ai/font/MontserratBold-p781R.otf",
-                        "/home/toan/marketing-video-ai/font/PoppinsSemibold-8l8n.otf",
+                        "/home/toan/marketing-video-ai/font/MontserratMedium-lgZ6e.otf",
+                        "/home/toan/marketing-video-ai/font/MontserratSemibold-8M8PB.otf",
+                        "/home/toan/marketing-video-ai/font/RobotoBoldItalic-4e0x.ttf",
                     ]
-                    print("fsfsfsdf")
 
                     color_combos = [
-                        {"name": "Navy Blue & White", "bg": "(30, 58, 138)", "text": "#ffffff"},
-                        {"name": "Emerald Green & White", "bg": "(5, 150, 105)", "text": "#ffffff"},
-                        {"name": "Orange & Dark Gray", "bg": "(249, 115, 22)", "text": "#1f2937"},
-                        {"name": "Teal & White", "bg": "(13, 148, 136)", "text": "#ffffff"},
-                        {"name": "Sky Blue & White", "bg": "(2, 132, 199)", "text": "#ffffff"},
-                        {"name": "Magenta & White", "bg": "(192, 38, 211)", "text": "#ffffff"},
-                        {"name": "Gray & Black", "bg": "(156, 163, 175)", "text": "#000000"},
                         {"name": "White & Black", "bg": "(255, 255, 255)", "text": "#000000"},
+                        {"name": "Light Gray & Black", "bg": "(229, 231, 235)", "text": "#000000"},
+                        {"name": "Medium Gray & Black", "bg": "(209, 213, 219)", "text": "#000000"},
                     ]
                     
                     time_video=get_audio_duration(audiohavesecondatstart)
@@ -437,10 +448,10 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
                         time_video,                    # 4 = duration
                         resolution_tuple,              # 5 = resolution
                         font_path,                     # 6 = font (theo định nghĩa hàm)
-                        bg_color,                # 7 = bg_color
+                        bg_color,                      # 7 = bg_color
                         selected['text'],              # 8 = font_color
                         None,                          # 9 = font_size (None để tự tính)
-                        random.randint(1, 2),          # 10 = effect_type
+                        random.choice([5, 6]),         # 10 = effect_type
                         clip_name                      # 11 = output_path
                     )
 
@@ -560,44 +571,37 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
             cond_images=cond_images
         )
         # ===========================transition==================================
-        video_name1111111 = os.path.join(os.getcwd(), f"{job_id}clip_hehehehehe.mp4")
+        # video_name1111111 = os.path.join(os.getcwd(), f"{job_id}clip_hehehehehe.mp4")
         
-        for i in range(1, len(list_scene)):
-            list_scene[i] = list_scene[i-1] + list_scene[i]
-        for i in range(len(list_scene)):
-            list_scene[i] = list_scene[i] - 0.5*(i+1) 
+        # for i in range(1, len(list_scene)):
+        #     list_scene[i] = list_scene[i-1] + list_scene[i]
+        # for i in range(len(list_scene)):
+        #     list_scene[i] = list_scene[i] - 0.5*(i+1) 
 
-        complex_effects=[]
-        transition_effects = random_transition_list(len(list_scene))
-        for i in range(len(list_scene)):
-            start_time = list_scene[i] - 1 / 2
-            end_time = list_scene[i] + 1 / 2
-            effect_name = transition_effects[i]
-            complex_effects.append({
-                "start_time": start_time,
-                "end_time": end_time,
-                "effect": effect_name
-            })
-            print("================================")
-        # apply_multiple_effects(
-        #     video_path=output_path_video,
-        #     output_path=str(video_name1111111),
-        #     effects_list=complex_effects,
-        #     quality="high"
+        # complex_effects=[]
+        # transition_effects = random_transition_list(len(list_scene))
+        # for i in range(len(list_scene)):
+        #     start_time = list_scene[i] - 1 / 2
+        #     end_time = list_scene[i] + 1 / 2
+        #     effect_name = transition_effects[i]
+        #     complex_effects.append({
+        #         "start_time": start_time,
+        #         "end_time": end_time,
+        #         "effect": effect_name
+        #     })
+        #     print("================================")
+      
+        # loop = asyncio.get_event_loop()
+        # await loop.run_in_executor(
+        #     None,  
+        #     apply_multiple_effects,
+        #     output_path_video,
+        #     str(video_name1111111),
+        #     complex_effects,
+        #     "high"
         # )
-        # os.remove(output_path_video)
-        # os.rename(video_name1111111, output_path_video)
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(
-            None,  # Dùng default ThreadPoolExecutor
-            apply_multiple_effects,
-            output_path_video,
-            str(video_name1111111),
-            complex_effects,
-            "high"
-        )
-        await delete_file_async(output_path_video)
-        await asyncio.to_thread(os.rename, video_name1111111, output_path_video)
+        # await delete_file_async(output_path_video)
+        # await asyncio.to_thread(os.rename, video_name1111111, output_path_video)
 
         #========================================================
         
@@ -904,11 +908,11 @@ async def generate_video_cmd(prompt, cond_image, cond_audio_path, output_path, j
             wf_w = 720
             wf_h = 720
         elif resolution=="16:9":    
-            wf_w = 1088
-            wf_h = 608
+            wf_w = 1120
+            wf_h = 640
         elif resolution=="9:16":
-            wf_w = 544
-            wf_h = 960
+            wf_w = 592
+            wf_h = 1040
         elif resolution=="720":
             wf_w = 448
             wf_h = 800
@@ -922,11 +926,11 @@ async def generate_video_cmd(prompt, cond_image, cond_audio_path, output_path, j
                 wf_w = 640
                 wf_h = 640
             elif resolution=="16:9":    
-                wf_w = 960
-                wf_h = 544 
+                wf_w = 1040
+                wf_h = 592 
             elif resolution=="9:16":
-                wf_w = 544
-                wf_h = 960
+                wf_w = 640
+                wf_h = 1120
             elif resolution=="720":
                 wf_w = 448
                 wf_h = 800
@@ -1119,28 +1123,33 @@ async def generate_video_fast(prompt, cond_image, cond_audio_path, output_path, 
             for i in range(howmuch1):
                 job_id1 = str(uuid.uuid4())
                 prompt_pairs = [
-                    {
-                        "image": "Create a realistic photo of the input product placed on a small pedestal or stand in a bright white studio corner. \
-The background is pure white with soft natural light coming from one side, creating gentle shadows and realistic reflections on the surface. \
-The product should look clean, sharp, and naturally lit — as if photographed in a professional studio with a minimal setup. \
-Keep the product’s shape and texture unchanged.",
-                        "video": "Create a smooth cinematic 360-degree rotation video of the input product. The product stays centered on a clean studio background with soft lighting and realistic reflections. The camera slowly orbits around the product in a complete circle, showing all sides with natural motion and focus depth. Keep the product perfectly detailed and consistent with the input image. Use gentle motion blur and subtle shadows to make it feel realistic. The style should look like a professional product commercial shot with high-end studio lighting."
-                    },
+#                     {
+#                         "image": "Create a realistic photo of the input product placed on a small pedestal or stand in a bright white studio corner. \
+# The background is pure white with soft natural light coming from one side, creating gentle shadows and realistic reflections on the surface. \
+# The product should look clean, sharp, and naturally lit — as if photographed in a professional studio with a minimal setup. \
+# Keep the product’s shape and texture unchanged.",
+#                         "video": "Create a smooth cinematic 180-degree rotation video of the input product. The product stays centered on a clean studio background with soft lighting and realistic reflections. The camera slowly orbits around the product in a complete circle, showing all sides with natural motion and focus depth. Keep the product perfectly detailed and consistent with the input image. Use gentle motion blur and subtle shadows to make it feel realistic. The style should look like a professional product commercial shot with high-end studio lighting."
+#                     },
                     {
                         "image": "Create a realistic image of the input product placed on a small stand or pedestal in a dark studio environment. \
 The background is deep black or dark grey, illuminated by a focused light source that highlights the product’s contours and reflections. \
 Subtle shadows and a faint rim light enhance depth and texture, giving the scene a premium professional look. \
 Keep the product realistic and unchanged, with no distortion.",
-                        "video": "Create a smooth cinematic 360-degree rotation video of the input product. The product stays centered on a clean studio background with soft lighting and realistic reflections. The camera slowly orbits around the product in a complete circle, showing all sides with natural motion and focus depth. Keep the product perfectly detailed and consistent with the input image. Use gentle motion blur and subtle shadows to make it feel realistic. The style should look like a professional product commercial shot with high-end studio lighting."
-                    },
-                    {
-                        "image": "A cinematic dark photo of the product surrounded by ice cubes and frost. The product emits a soft blue glow reflecting on nearby ice. Steam rises gently in the background. The lighting is cold and moody, emphasizing clarity and chill freshness.",
-                        "video": "A cinematic ultra-realistic slow-motion video of the product standing on an icy surface, surrounded by frost and mist. Ice cubes fall from above and scatter around the product, bouncing and sliding on the cold surface. The product emits a soft blue glow reflecting on the ice. Subtle steam rises in the background, with cold atmospheric lighting and depth of field, emphasizing clarity and chill freshness. 4K, realistic lighting, shallow depth of field, high frame rate, macro lens effect, cinematic color grading."
+                        "video": "Create a smooth cinematic 180-degree rotation video of the input product. The product stays centered on a clean studio background with soft lighting and realistic reflections. The camera slowly orbits around the product in a complete circle, showing all sides with natural motion and focus depth. Keep the product perfectly detailed and consistent with the input image. Use gentle motion blur and subtle shadows to make it feel realistic. The style should look like a professional product commercial shot with high-end studio lighting."
                     },
                     {
                         "image": "Generate a premium advertisement image using the given product. Place the product on a smooth matte surface with soft smoke drifting beneath and subtle fog layers wrapping around the base. Add elegant key lighting from above and a warm rim light from behind to emphasize shape and texture. The background is minimalist with dark tones fading to light, cinematic contrast, ultra-detailed shadows, and soft reflections for a sophisticated and modern mood.",
                         "video": "a slow-motion advertising video where the product stands on a dark matte surface. Soft smoke waves drift beneath and around it, illuminated by subtle moving light beams from the sides. The camera gently pans and tilts to highlight the product’s shape and logo. The environment feels cinematic, mysterious, and luxurious with a warm-to-cool gradient light"
+                    },
+                    {
+                        "image": "Generate a luxurious product advertisement image where the product stands on a textured stone pedestal. Dense golden smoke curls around the base and slowly fades into the background. Use warm amber and orange lighting to create depth and highlight the product’s silhouette. The background transitions from dark bronze to soft gold mist with a cinematic vignette. The overall look is bold, premium, and dramatic.",
+                        "video": "a cinematic macro-style product video featuring the item on a rough stone pedestal. Thick amber smoke rolls gently across the base, illuminated by warm, flickering lights. The camera moves slowly from low angle to front view, emphasizing power and luxury. The color tone is warm and cinematic with deep shadows and glowing highlights."
+                    },
+                    {
+                        "image": "Generate a cinematic product showcase placed on a slightly reflective glass pedestal. Soft white smoke drifts and swirls at the base, illuminated by cool blue underlights. The background fades from deep navy to soft cyan with faint volumetric light rays. The mood is futuristic, premium, and clean with crisp reflections and fine atmospheric haze. Key lighting comes from the top with subtle side glows for a high-end commercial look.",
+                        "video": "a slow, cinematic product reveal video where the item rests on a glass pedestal surrounded by drifting white smoke. Blue light pulses softly from below, interacting with the fog. The camera makes a smooth orbit move while focus shifts across the surface details. The tone is high-tech, elegant, and mysterious with a refined cool color palette."
                     }
+
 
                 ]
 
@@ -1308,7 +1317,7 @@ async def generate_image_with_comfyui( width,height, job_id ,input_image=None,pr
                 workflow["111"]["inputs"]["prompt"] = nsdaaff
             if type_sideface=="sideface":
                 print("change side??????????????????????hehe")
-                workflow["111"]["inputs"]["prompt"] = "change the pose of the person to the reference image. keep the same background"
+                workflow["111"]["inputs"]["prompt"] = "change the pose of the person to the reference image. keep the same background and take off the headphones."
             # print(nsdaaff)
             # print("||||||||||||||||||||||||||||||||||||||||||||||")
         # ======================================================================
