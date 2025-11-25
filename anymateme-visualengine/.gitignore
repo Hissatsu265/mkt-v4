@@ -1,0 +1,14 @@
+__pycache__
+*.py[cod]
+*.pyo
+*.pyc
+.env
+*.pem
+.gradio
+*.csv
+*__pycache__
+*.log
+uploads
+*.json
+checkpoints
+*.png

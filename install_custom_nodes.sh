@@ -4,9 +4,10 @@
 # Script: install_custom_nodes.sh
 # Mục đích: Cài đặt các thư viện cho custom nodes của ComfyUI
 # ==============================================
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Đường dẫn gốc tới custom_nodes
-CUSTOM_NODES_DIR="/home/toan/marketing-video-ai/ComfyUI/custom_nodes"
+CUSTOM_NODES_DIR="$SCRIPT_DIR/ComfyUI/custom_nodes"
 
 echo "📂 Đường dẫn custom nodes: $CUSTOM_NODES_DIR"
 cd "$CUSTOM_NODES_DIR" || { echo "❌ Không tìm thấy thư mục custom_nodes!"; exit 1; }

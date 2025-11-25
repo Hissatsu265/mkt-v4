@@ -24,8 +24,8 @@ wget -nc -O "$DIFFUSION_DIR/wan2.1-i2v-14b-480p-Q8_0.gguf" \
 "https://huggingface.co/city96/Wan2.1-I2V-14B-480P-gguf/resolve/main/wan2.1-i2v-14b-480p-Q8_0.gguf?download=true"
 
 # Download Wan 2.1 I2V 14B 480P Q4
-wget -nc -O "$DIFFUSION_DIR/wan2.1-i2v-14b-480p-Q4_0.gguf" \
-"https://huggingface.co/city96/Wan2.1-I2V-14B-480P-gguf/resolve/main/wan2.1-i2v-14b-480p-Q4_0.gguf"
+# wget -nc -O "$DIFFUSION_DIR/wan2.1-i2v-14b-480p-Q4_0.gguf" \
+# "https://huggingface.co/city96/Wan2.1-I2V-14B-480P-gguf/resolve/main/wan2.1-i2v-14b-480p-Q4_0.gguf"
 
 # Download MelBandRoFormer
 wget -nc -O "$DIFFUSION_DIR/MelBandRoformer_fp16.safetensors" \

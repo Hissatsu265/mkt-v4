@@ -17,11 +17,14 @@ from config import SERVER_COMFYUI,WORKFLOW_INFINITETALK_PATH,BASE_DIR
 from PIL import Image
 server_address = SERVER_COMFYUI
 from utilities.divide_audio import process_audio_file
+from utilities.generate_prompt import generate_prompts
 from utilities.merge_video import concat_videos
 from utilities.cut_video import cut_video,cut_audio,cut_audio_from_time
 from utilities.audio_duration import get_audio_duration
 from utilities.audio_processing_infinite import trim_video_start,add_silence_to_start
 from utilities.check_audio_safe import wait_for_audio_ready
+from utilities.extract_fulltext import process_audio_to_fulltext
+
 import asyncio
 from directus.file_upload import Uploadfile_directus
 from app.services.job_service import job_service
@@ -32,7 +35,8 @@ image_paths_product = []
 image_path_sideface = [] 
 image_paths_product_rout360=[]
 video_paths_product_rout360=[]
-event="none"
+event="Christmas"
+full_text_ofauido=""
 import cv2
 import numpy as np
 
@@ -109,7 +113,6 @@ async def concat_and_merge_async(job_id, results, cond_audio_path, output_path_v
 
     loop = asyncio.get_event_loop()
     def _do_concat_merge():
-        """Hàm blocking - chạy trong thread pool"""
         concat_name = os.path.join(os.getcwd(), f"{job_id}_concat.mp4")
         from utilities.merge_video import concat_videos
         output_file1 = concat_videos(results, concat_name)
@@ -119,10 +122,10 @@ async def concat_and_merge_async(job_id, results, cond_audio_path, output_path_v
         
         try:
             os.remove(output_file1)
-            print("fdfsdfsdfsdfsfd")
+            # print("fdfsdfsdfsdfsfd")
             for file in results:
                 os.remove(file)
-            print("sfdfsdfsdf")
+            # print("sfdfsdfsdf")
             for path in cond_images:
                 if path != "" and os.path.exists(path):
                      os.remove(path)
@@ -291,11 +294,11 @@ def check_time_gap(start_times, end_times):
 
     # các trường hợp khác trả về 2
     return 2
-def custom_random_sequence111(n):
+def custom_random_sequence222(n):
     if n <= 0:
         return []
 
-    nums = [1, 8, 9]
+    nums = [1, 8, 9,5]
     sequence = []
     last_seen = {num: -10 for num in nums}  # lưu vị trí xuất hiện gần nhất
     last = None
@@ -338,8 +341,58 @@ def custom_random_sequence111(n):
         last = value
 
     return sequence
+def custom_random_sequence111(n):
+    if n <= 0:
+        return []
 
-    # return [9,9,1,5][:n]  
+    nums = [1, 8, 9]
+    sequence = []
+
+    # đánh dấu lần xuất hiện
+    last_seen = {num: -10 for num in nums}
+    last = None
+
+    for i in range(n):
+
+        # --- Cảnh đầu tiên luôn là số 1 ---
+        if i == 0:
+            value = 1
+
+        # --- Cảnh thứ 2: vẫn đảm bảo có 1 trong 2 cảnh đầu ---
+        elif i == 1:
+            if 1 not in sequence:
+                value = 1
+            else:
+                candidates = [x for x in nums if x != last]
+                value = random.choice(candidates)
+
+        else:
+            candidates = []
+            for num in nums:
+                # không trùng với cảnh trước
+                if num == last:
+                    continue
+                # nếu là 1 hoặc 7 hoặc 9 cần cách ít nhất 4 cảnh
+                if num in [1, 7, 9] and i - last_seen[num] < 4:
+                    continue
+                # nếu là số khác thì cách 5 cảnh
+                if num not in [1, 7] and i - last_seen[num] < 5:
+                    continue
+
+                candidates.append(num)
+
+            # nếu không có lựa chọn hợp lệ thì nới lỏng
+            if not candidates:
+                candidates = [x for x in nums if x != last]
+
+            value = random.choice(candidates)
+
+        sequence.append(value)
+        last_seen[value] = i
+        last = value
+
+    # return sequence
+    return [9,9,9,9,9,9,9,1,5][:n]  
     # return [2,3,4,2,3,4,2,3,4,2,3,4][:n]
 
 class VideoService:
@@ -357,6 +410,9 @@ class VideoService:
         # time.sleep(2)
         # await job_service.update_job_status(job_id, "processing", progress=0)
         # return "https://cms.anymateme.pro/assets/425ad513-d54c-4faa-8098-1b36feb06729",[]
+        print("BASEDIR: ",BASE_DIR)
+        global full_text_ofauido
+        full_text_ofauido=""
         jobid, output_filename = self.generate_output_filename()
         jobid=job_id
         output_path = self.output_dir / output_filename
@@ -379,7 +435,7 @@ class VideoService:
             if path_directus is not None and output_path.exists() :
                 print(f"Video upload successfully: {path_directus}")
                 print(f"Job ID: {job_id}, Output Path: {path_directus}")
-                # os.remove(str(output_path))
+                os.remove(str(output_path))
                 return str(path_directus),list_scene
             else:
                 if not output_path.exists():
@@ -406,14 +462,16 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
         first_time=True
         last_value=None
         if len(cond_images)>1 and cond_images[1]!="":
-            event="Christmas"
             list_random = custom_random_sequence(len(output_paths))
         else:
             cond_images.append(cond_images[0])
-            event="Christmas"
-            list_random = custom_random_sequence111(len(output_paths))
-            # prompts[0]="A realistic video of a person confidently giving a lecture. Their face remains neutral and professional, without expressions or head movement. Their hands moves up and down slowly and naturally to emphasize his words without swinging his arms from side to side, creating the impression of a teacher explaining a lesson."
-            prompts[0]="The background contains subtle natural motion such as soft light shifts, gentle ambient movement, and small environmental details that keep the scene lively and believable. A cartoon style video of a person confidently giving a lecture. The face stays neutral and professional without noticeable expressions or head movement. The hands move slowly up and down in a natural way to support the speech."
+            if event=="Christmas":
+                list_random = custom_random_sequence111(len(output_paths))
+                prompts[0]="A festive cartoon-style video of a character in a holiday environment. The background has subtle ambient motion, soft light shifts, and gentle environmental details to make the scene lively and realistic. The character is standing straight, calm, and natural, without any exaggerated movements or expressions"
+            else:
+                list_random = custom_random_sequence222(len(output_paths))
+                prompts[0]="A realistic video of a person confidently giving a lecture. Their face remains neutral and professional, without expressions or head movement. Their hands moves up and down slowly and naturally to emphasize his words without swinging his arms from side to side, creating the impression of a teacher explaining a lesson."
+
         # count = len(list(filter(lambda x: x != 1, list_random)))
         count = len(list(filter(lambda x: x ==2 or x==3, list_random)))
         count1=len(list(filter(lambda x: x ==7, list_random)))
@@ -475,9 +533,22 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
                 ratio="16:9"
                 if  resolution=="9:16":
                     ratio="9:16"
+                # ====================================================
+                global full_text_ofauido
+                full_text_ofauido = await asyncio.to_thread(
+                    process_audio_to_fulltext,cond_audio_path
+                )
+                print("Full text of audio:", full_text_ofauido)
+                image_prompt11, video_prompt111= await asyncio.to_thread(
+                    generate_prompts, full_text_ofauido,str(full_text)
+                )
+                print("=========PROMPTs for scene ",i,"=============")
+                print("Image Prompt:", image_prompt11)
+                print("Video Prompt:", video_prompt111)
+                # ====================================================
                 from utilities.text_to_image import generate_image
                 result= await asyncio.to_thread(
-                    generate_image, str(full_text),ratio
+                    generate_image, str(image_prompt11),ratio
                 )
                 result_text2image_path=""
                 if result.get("success", False):
@@ -511,9 +582,10 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
                         start_times=start_times_list,
                         end_times=new_end_times,
                         output_path=clip_name,
-                        font_path="/home/toan/marketing-video-ai/font/MontserratMedium-lgZ6e.otf"
+                        font_path=str(BASE_DIR)+"/font/MontserratMedium-lgZ6e.otf"
                     )
-                    # os.remove(result_text2image_path)
+                    os.remove(result_text2image_path)
+                    os.remove(clip_name_test)
                 elif list_random[i] == 9:
                     # ==============================create silent file==========
                     silent_file=os.path.join(os.getcwd(), f"{job_id}_silent.wav")
@@ -521,14 +593,14 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
                     # =======================================================
                     clip_name_test=os.path.join(os.getcwd(), f"{job_id}_clip_{i}_test.mp4")
                     output=await generate_video_cmd(
-                        prompt="Create a realistic and lively video from the input image by adding natural motion to all existing subjects. Make people and objects move gently and believably, with subtle body motion and ambient environmental movement. Keep the scene authentic and consistent with the original photo, enhancing realism without adding new elements.",
+                        prompt=video_prompt111,
                         cond_image=result_text2image_path,
                         cond_audio_path=silent_file, 
                         output_path=clip_name_test,
                         job_id=job_id,
                         resolution=resolution
                     )
-                    # os.remove(result_text2image_path)
+                    os.remove(result_text2image_path)
                     os.remove(silent_file)
                     tttttttt=check_time_gap(start_times_list, new_end_times)
                     if tttttttt==1:
@@ -540,7 +612,7 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
                             start_times=start_times_list,
                             end_times=new_end_times,
                             output_path=clip_name,
-                            font_path="/home/toan/marketing-video-ai/font/MontserratMedium-lgZ6e.otf"
+                            font_path=str(BASE_DIR)+"/font/MontserratMedium-lgZ6e.otf"
                         )
                     else:
                         from animation.add_keyword_type9 import create_keyword_video_noblur
@@ -551,8 +623,9 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
                             start_times=start_times_list,
                             end_times=new_end_times,
                             output_path=clip_name,
-                            font_path="/home/toan/marketing-video-ai/font/MontserratMedium-lgZ6e.otf"
+                            font_path=str(BASE_DIR)+"/font/MontserratMedium-lgZ6e.otf"
                         )
+                    os.remove(clip_name_test)
 
 
 # ========================================================================                
@@ -782,13 +855,13 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
         tempt=trim_video_start(generate_output_filename, duration=0.5)
         output_file = replace_audio_trimmed(generate_output_filename,cond_audio_path,output_path_video)
         try:
-            print("ssssssssssss")
+            # print("ssssssssssss")
             os.remove(str(generate_output_filename))
-            print("000000")
+            # print("000000")
             os.remove(str(audiohavesecondatstart))
-            print("sdfsd")
+            # print("sdfsd")
             os.remove(str(cond_audio_path))
-            print("sdf")
+            # print("sdf")
             os.remove(str(file_path))
         except Exception as e:
             print(f"❌ Error removing temporary files: {str(e)}")
@@ -852,7 +925,7 @@ async def stop_comfyui(process):
             print("⚠️ Force killing ComfyUI...")
             process.kill()
             await process.wait()
-async def load_workflow(path="workflow.json"):
+async def load_workflow(path="workflow"):
     async with aiofiles.open(path, "r", encoding='utf-8') as f:
         content = await f.read()
         return json.loads(content)
@@ -994,6 +1067,8 @@ async def generate_video_cmd(prompt, cond_image, cond_audio_path, output_path, j
     try:
         print("🔄 Loading workflow...")
         workflow = await load_workflow(str(BASE_DIR) + "/" + WORKFLOW_INFINITETALK_PATH)  
+        # print("999999999999999999999",workflow)
+
 # ===========================================================================
         # workflow["203"]["inputs"]["image"] = cond_image
         # workflow["125"]["inputs"]["audio"] = cond_audio_path
@@ -1236,12 +1311,12 @@ async def generate_video_fast(prompt, cond_image, cond_audio_path, output_path, 
     width=720
     height=1280
     str__kl="720x1280"
-    video_bg="/home/toan/marketing-video-ai/backgrund_vid/9_16"
+    video_bg=str(BASE_DIR)+"/backgrund_vid/9_16"
     if resolution=="16:9" or resolution=="720_16:9":
         width=1280
         height=720
         str__kl="1280x720"
-        video_bg="/home/toan/marketing-video-ai/backgrund_vid/16_9"
+        video_bg=str(BASE_DIR)+"/backgrund_vid/16_9"
     elif resolution=="9:16":
         width=720
         height=1280
@@ -1407,7 +1482,7 @@ Keep the product realistic and unchanged, with no distortion.",
             await asyncio.to_thread(
                 fairyending,
                 VIDEO_FOLDER=video_bg,
-                FONT_FOLDER="/home/toan/marketing-video-ai/font",
+                FONT_FOLDER=str(BASE_DIR)+"/font",
                 IMAGE_PATH=cond_image,
                 OUTPUT_PATH=output_path,
                 DURATION=time_videotype6,
@@ -1421,7 +1496,7 @@ Keep the product realistic and unchanged, with no distortion.",
         output=await generate_video_cmd(
                     prompt=video_paths_product_rout360[0],
                     cond_image=image_paths_product_rout360[0],
-                    cond_audio_path="/home/toan/marketing-video-ai/directus/english_girl_3s.wav", 
+                    cond_audio_path=str(BASE_DIR)+"/directus/english_girl_3s.wav", 
                     output_path=filename,
                     job_id=jobid,
                     resolution=resolution,
@@ -1447,7 +1522,7 @@ Keep the product realistic and unchanged, with no distortion.",
         jobid = uuid.uuid4().hex
         number = random.randint(1, 1000)
         if event=="Christmas":
-            prompt_evesdf = "The background contains subtle natural motion such as soft light shifts, gentle ambient movement, and small environmental details that keep the scene lively and believable. A cartoon style video of a person confidently giving a lecture. The face stays neutral and professional without noticeable expressions or head movement. The hands move slowly up and down in a natural way to support the speech."
+            prompt_evesdf = "A festive cartoon-style video of a character in a holiday environment. The background has subtle ambient motion, soft light shifts, and gentle environmental details to make the scene lively and realistic. The character is standing straight, calm, and natural, without any exaggerated movements or expressions"
         else:
             prompt_evesdf = "A realistic video of a person confidently giving a lecture in front of a indoor background. The person’s face is turned to one side, maintaining that direction throughout the video without ever facing the camera directly. Their expression remains neutral and professional, with no head movement. Their hands moves slowly, naturally, and with subtle variation to emphasize their words, creating the impression of a teacher explaining a lesson.",
         output=await generate_video_cmd(
@@ -1474,38 +1549,32 @@ async def generate_image_with_comfyui( width,height, job_id ,input_image=None,pr
     # await asyncio.sleep(8)
     try:
         print("🔄 Loading workflow...")
-        if type_sideface=="sideface":
-            workflow_path="/home/toan/marketing-video-ai/workflow/Qwen+Image+Edit+Plus(2509)+Basic+Version (1)_api.json"
+        if type_sideface=="sideface": 
+            workflow_path=str(BASE_DIR)+"/workflow/QWen_change_pose.json"
         else:
             # workflow_path="/home/toan/anymateme-visualengine/workflow/Qwen IMAGE Edit 2509 Three Image Edit_api (2).json"
-            workflow_path="/home/toan/anymateme-visualengine/workflow/QWen_skin_fixlora_1image_api.json"
-        # print(f"Workflow path: {workflow_path}")
+            workflow_path=str(BASE_DIR)+"/workflow/QWen_gen_1_image.json"
         workflow = await load_workflow1(workflow_path)
-        # print(input_image)
         workflow["78"]["inputs"]["image"] = input_image if input_image else "none"
         workflow["3"]["inputs"]["steps"]=8
         
         if "111" in workflow:
             if prompt is not None:
-                print("dung prompt của mình tạ ả=-=-=-=-=-=-=-=-=-=-=-s")
                 workflow["111"]["inputs"]["prompt"] = prompt
             else:
                 nsdaaff=get_random_prompt()
                 workflow["111"]["inputs"]["prompt"] = nsdaaff
             if type_sideface=="sideface":
-                print("change side??????????????????????hehe")
                 workflow["111"]["inputs"]["prompt"] = "change the pose of the person to the reference image. keep the same background and take off the headphones."
-            # print(nsdaaff)
-            # print("||||||||||||||||||||||||||||||||||||||||||||||")
         # ======================================================================
         if "108" in workflow and type_sideface=="sideface":
             image_paths_ref16_9 = [
-                "/home/toan/marketing-video-ai/sideface_image_ref/5.png",
-                "/home/toan/marketing-video-ai/sideface_image_ref/6.png"
+                str(BASE_DIR)+"/sideface_image_ref/5.png",
+                str(BASE_DIR)+"/sideface_image_ref/6.png"
             ]
             image_paths_ref9_16=[
-                "/home/toan/marketing-video-ai/sideface_image_ref/916_1.png",
-                "/home/toan/marketing-video-ai/sideface_image_ref/916_2.png"
+                str(BASE_DIR)+"/sideface_image_ref/916_1.png",
+                str(BASE_DIR)+"/sideface_image_ref/916_2.png"
             ]
             if width > height:
                 random_image = random.choice(image_paths_ref16_9)
@@ -1550,7 +1619,6 @@ async def generate_image_with_comfyui( width,height, job_id ,input_image=None,pr
         print(f"❌ Error creating image with ComfyUI: {e}")
         raise
     finally:
-        # await stop_comfyui1(process)
         print("done 1 image")
 # ===================================================================================
 
@@ -1643,9 +1711,7 @@ async def wait_for_completion1(prompt_id, client_id, server_address):
 
 async def find_image_by_id(image_id, output_dir=str("ComfyUI/output")):
     def _find_files():
-        # PARENT_DIR = os.path.dirname(BASE_DIR)
-        output_dir="/home/toan/anymateme-visualengine/ComfyUI/output"
-        # output_dir = os.path.join(PARENT_DIR, "ComfyUI/output")
+        output_dir=str(BASE_DIR)+"/ComfyUI/output"
         target_dir = os.path.join(output_dir, str(image_id))
         if not os.path.exists(target_dir):
             print(f"❌ Directory not found: {target_dir}")
@@ -1657,17 +1723,9 @@ async def find_image_by_id(image_id, output_dir=str("ComfyUI/output")):
         if not files:
             print(f"🔍 No file found with id '{image_id}' in {target_dir}")
             return None
-        # print("====================================")
-        # print(files)
         t=files[0]
-        files.append(t)
-        # latest_file = max(files, key=os.path.getmtime)
-        # print(f"📁 File found: {latest_file}")
-        # return latest_file
+        files.append(t) 
         files_sorted = sorted(files, key=os.path.getmtime, reverse=True)
-        # print(files_sorted)
-        # print("====================================")
-    
         return files_sorted[:1]
 
     loop = asyncio.get_event_loop()
@@ -1682,7 +1740,7 @@ from pathlib import Path
 async def start_comfyui1():
     HOST = "127.0.0.1"
     PORT = 8188
-    COMFYUI_DIR = "/home/toan/anymateme-visualengine/ComfyUI"
+    COMFYUI_DIR = str(BASE_DIR)+"/anymateme-visualengine/ComfyUI"
     process = await asyncio.create_subprocess_exec(
         "python3", "main.py",
         cwd=str(COMFYUI_DIR),
