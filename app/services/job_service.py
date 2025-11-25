@@ -787,12 +787,23 @@ from app.models.schemas import JobStatus
 from typing import Dict, Any, List
 from app.models.mongodb import mongodb
 from app.services.job_repository import job_repository
-import asyncio
 
+
+import re
+
+URL_REGEX = re.compile(
+    r'^(https?://)'
+    r'(([A-Za-z0-9-]+\.)+[A-Za-z]{2,6})'
+    r'(/[A-Za-z0-9._~:/?#\[\]@!$&\'()*+,;=-]*)?$'
+)
+def is_valid_url(url: str) -> bool:
+    return isinstance(url, str) and bool(URL_REGEX.match(url))
 async def download_assets(job_data):
+ 
     image_tasks = [
         asyncio.to_thread(download_image, img_url)
         for img_url in job_data["image_paths"]
+        if is_valid_url(img_url)
     ]
     audio_task = asyncio.to_thread(download_audio, job_data["audio_path"])
 
@@ -800,7 +811,7 @@ async def download_assets(job_data):
 
     images_pathdown = results[:-1]
     audio_path_down = results[-1]
-
+    print(images_pathdown," ==============")
     return images_pathdown, audio_path_down
 
 class JobService:
@@ -824,6 +835,62 @@ class JobService:
         self.effect_workers_busy: List[bool] = []
         self.max_effect_workers = self._calculate_effect_workers()
         self._init_effect_workers()
+    # =============================================================
+    async def _reconnect_mongodb_if_needed(self, max_retries: int = 3, retry_delay: float = 2.0):
+        """Thử reconnect MongoDB nếu connection bị mất"""
+        for attempt in range(max_retries):
+            try:
+                # Test connection
+                await mongodb.client.admin.command('ping')
+                print(f"MongoDB connection verified (attempt {attempt + 1})")
+                return True
+            except Exception as e:
+                print(f"MongoDB connection failed (attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    # Disconnect và reconnect
+                    try:
+                        await mongodb.disconnect()
+                        await asyncio.sleep(retry_delay)
+                        await mongodb.connect()
+                    except Exception as reconnect_error:
+                        print(f"Reconnection attempt failed: {reconnect_error}")
+                        await asyncio.sleep(retry_delay)
+                else:
+                    print("All MongoDB reconnection attempts failed")
+                    return False
+        return False
+
+    async def _execute_with_retry(self, operation, operation_name: str, max_retries: int = 3, retry_delay: float = 2.0):
+        """Execute MongoDB operation với retry logic"""
+        for attempt in range(max_retries):
+            try:
+                result = await operation()
+                return result
+            except Exception as e:
+                error_msg = str(e).lower()
+                is_timeout = any(keyword in error_msg for keyword in [
+                    'timed out', 'timeout', 'networktimeout', 
+                    'connectionfailure', 'server selection timeout'
+                ])
+                
+                print(f"{operation_name} failed (attempt {attempt + 1}/{max_retries}): {e}")
+                
+                if is_timeout and attempt < max_retries - 1:
+                    print(f"Timeout detected, attempting MongoDB reconnection...")
+                    reconnected = await self._reconnect_mongodb_if_needed()
+                    if reconnected:
+                        await asyncio.sleep(retry_delay)
+                        continue
+                
+                # Nếu là attempt cuối hoặc không phải timeout error
+                if attempt == max_retries - 1:
+                    print(f"{operation_name} failed after {max_retries} attempts")
+                    raise
+                
+                await asyncio.sleep(retry_delay)
+        
+        raise Exception(f"{operation_name} failed after all retries")
+    # ================================================================
     async def init_mongodb(self):
         """Khởi tạo MongoDB connection"""
         try:
@@ -982,8 +1049,41 @@ class JobService:
     #     asyncio.create_task(self.start_cleanup_task())
         
     #     return job_id
+    # async def create_job(self, image_paths: list, prompts: list, audio_path: str, resolution: str = "1920x1080") -> str:
+    #     """Tạo job mới - LƯU VÀO MONGODB"""
+    #     job_id = str(uuid.uuid4())
+        
+    #     job_data = {
+    #         "job_id": job_id,
+    #         "status": JobStatus.PENDING,
+    #         "image_paths": image_paths,
+    #         "prompts": prompts,
+    #         "audio_path": audio_path,
+    #         "resolution": resolution,
+    #         "progress": 0,
+    #         "video_path": None,
+    #         "error_message": None,
+    #         "created_at": datetime.now().isoformat(),
+    #         "completed_at": None,
+    #         "queue_position": self.job_queue.qsize() + 1
+    #     }
+    #     # await self.job_queue.put(job_data.copy())
+    #     # LƯU VÀO MONGODB thay vì RAM
+    #     await job_repository.insert_job(job_data)
+    #     print("After insert:", job_data)
+
+    #     # Thêm vào queue (giữ nguyên)
+    #     await self.job_queue.put(job_data.copy())
+    #     print("11111After insert:", job_data)
+
+        
+    #     # Start worker và cleanup (giữ nguyên)
+    #     await self.start_worker()
+    #     asyncio.create_task(self.start_cleanup_task())
+        
+    #     return job_id
     async def create_job(self, image_paths: list, prompts: list, audio_path: str, resolution: str = "1920x1080") -> str:
-        """Tạo job mới - LƯU VÀO MONGODB"""
+        """Tạo job mới - LƯU VÀO MONGODB với retry"""
         job_id = str(uuid.uuid4())
         
         job_data = {
@@ -1001,13 +1101,26 @@ class JobService:
             "queue_position": self.job_queue.qsize() + 1
         }
         
-        # LƯU VÀO MONGODB thay vì RAM
-        await job_repository.insert_job(job_data)
+        async def _insert_job():
+            return await job_repository.insert_job(job_data)
         
-        # Thêm vào queue (giữ nguyên)
-        await self.job_queue.put(job_data)
+        try:
+            await self._execute_with_retry(
+                operation=_insert_job,
+                operation_name=f"create_job[{job_id}]",
+                max_retries=3,
+                retry_delay=2.0
+            )
+            print(f"Job created successfully: {job_id}")
+            
+        except Exception as e:
+            print(f"Failed to create job {job_id} after all retries: {e}")
+            raise  # Re-raise để API trả về error
         
-        # Start worker và cleanup (giữ nguyên)
+        # Thêm vào queue
+        await self.job_queue.put(job_data.copy())
+        
+        # Start worker và cleanup
         await self.start_worker()
         asyncio.create_task(self.start_cleanup_task())
         
@@ -1031,44 +1144,47 @@ class JobService:
             self.processing = True
 
     # async def get_job_status(self, job_id: str) -> Dict[str, Any]:
-    #     """Lấy trạng thái job - NON-BLOCKING"""
-    #     # Kiểm tra trong memory trước
-    #     if job_id in self.jobs:
-    #         job_data = self.jobs[job_id].copy()
-            
-    #         # Cập nhật queue position cho job pending
-    #         if job_data["status"] == JobStatus.PENDING:
-    #             position = await self.get_queue_position(job_id)
-    #             job_data["queue_position"] = position
-            
-    #         return job_data
+    #     """Lấy job status từ MongoDB"""
         
-    #     # Kiểm tra trong Redis - sử dụng create_task để không block
-    #     if self.redis_client:
-    #         try:
-    #             job_data = await self.redis_client.get(f"job:{job_id}")
-    #             if job_data:
-    #                 return json.loads(job_data)
-    #         except Exception as e:
-    #             print(f"Error getting job from Redis: {e}")
+    #     # LẤY TỪ MONGODB thay vì RAM
+    #     job_data = await job_repository.find_job_by_id(job_id)
         
-    #     return None
+    #     if not job_data:
+    #         return None
+            
+    #     # Cập nhật queue position cho pending jobs
+    #     if job_data["status"] == JobStatus.PENDING:
+    #         position = await self.get_queue_position(job_id)
+    #         job_data["queue_position"] = position
+        
+    #     return job_data
     async def get_job_status(self, job_id: str) -> Dict[str, Any]:
-        """Lấy job status từ MongoDB"""
+        """Lấy job status từ MongoDB với retry logic"""
         
-        # LẤY TỪ MONGODB thay vì RAM
-        job_data = await job_repository.find_job_by_id(job_id)
+        async def _get_job():
+            return await job_repository.find_job_by_id(job_id)
         
-        if not job_data:
-            return None
+        try:
+            job_data = await self._execute_with_retry(
+                operation=_get_job,
+                operation_name=f"get_job_status[{job_id}]",
+                max_retries=3,
+                retry_delay=2.0
+            )
             
-        # Cập nhật queue position cho pending jobs
-        if job_data["status"] == JobStatus.PENDING:
-            position = await self.get_queue_position(job_id)
-            job_data["queue_position"] = position
-        
-        return job_data
-
+            if not job_data:
+                return None
+                
+            # Cập nhật queue position cho pending jobs
+            if job_data["status"] == JobStatus.PENDING:
+                position = await self.get_queue_position(job_id)
+                job_data["queue_position"] = position
+            
+            return job_data
+            
+        except Exception as e:
+            print(f"Error getting job status for {job_id} after all retries: {e}")
+            return None
     async def get_queue_position(self, job_id: str) -> int:
         """Lấy vị trí job trong queue"""
         position = 1
@@ -1095,27 +1211,83 @@ class JobService:
             for item in reversed(temp_queue):
                 await self.job_queue.put(item)
             return 0
-
-    # async def update_job_status(self, job_id: str, status: JobStatus, **kwargs):
-    #     if job_id in self.jobs:
-    #         self.jobs[job_id]["status"] = status
-    #         for key, value in kwargs.items():
-    #             self.jobs[job_id][key] = value
-            
-    #         if status == JobStatus.COMPLETED or status == JobStatus.FAILED:
-    #             self.jobs[job_id]["completed_at"] = datetime.now().isoformat()
-            
-    #         if self.redis_client:
-    #             asyncio.create_task(self._update_job_in_redis(job_id))
     async def update_job_status(self, job_id: str, status: JobStatus, **kwargs):
-        
+        """Update job status với retry logic"""
         update_data = {"status": status}
         update_data.update(kwargs)
-        
+
         if status in [JobStatus.COMPLETED, JobStatus.FAILED]:
             update_data["completed_at"] = datetime.now().isoformat()
+
+        async def _update_job():
+            return await job_repository.update_job(job_id, update_data)
+
+        try:
+            result = await self._execute_with_retry(
+                operation=_update_job,
+                operation_name=f"update_job_status[{job_id}]",
+                max_retries=5,  # Nhiều retry hơn cho update vì quan trọng
+                retry_delay=2.0
+            )
+            
+            print(f"[update_job_status] job_id={job_id} status={status} update_result={result}")
+            
+            if not result:
+                print(f"[update_job_status] Warning: update_job returned falsy result for job {job_id}")
+                
+        except Exception as e:
+            print(f"[update_job_status] Failed to update job {job_id} after all retries: {e}")
+            
+            # Thử mark as FAILED nếu update gốc thất bại
+            if status != JobStatus.FAILED:
+                try:
+                    async def _mark_failed():
+                        return await job_repository.update_job(
+                            job_id, 
+                            {
+                                "status": JobStatus.FAILED, 
+                                "error_message": f"Update error: {e}", 
+                                "completed_at": datetime.now().isoformat()
+                            }
+                        )
+                    
+                    await self._execute_with_retry(
+                        operation=_mark_failed,
+                        operation_name=f"mark_job_failed[{job_id}]",
+                        max_retries=3,
+                        retry_delay=2.0
+                    )
+                except Exception as e2:
+                    print(f"[update_job_status] Failed to mark job as FAILED: {e2}")
+    async def update_job_status(self, job_id: str, status: JobStatus, **kwargs):
+        update_data = {"status": status}
+        update_data.update(kwargs)
+
+        if status in [JobStatus.COMPLETED, JobStatus.FAILED]:
+            update_data["completed_at"] = datetime.now().isoformat()
+
+        try:
+            result = await job_repository.update_job(job_id, update_data)
+            # Ghi log kết quả update trả về từ repository để debug
+            print(f"[update_job_status] job_id={job_id} status={status} update_result={result}")
+            if not result:
+                print(f"[update_job_status] Warning: update_job returned falsy result for job {job_id}")
+        except Exception as e:
+            print(f"[update_job_status] Exception when updating job {job_id}: {e}")
+            # Không raise tiếp để worker vẫn tiếp tục; nhưng lưu lỗi vào Mongo để kiểm tra thủ công
+            try:
+                await job_repository.update_job(job_id, {"status": JobStatus.FAILED, "error_message": f"Update error: {e}", "completed_at": datetime.now().isoformat()})
+            except Exception as e2:
+                print(f"[update_job_status] Failed to mark job as FAILED after update exception: {e2}")
+    # async def update_job_status(self, job_id: str, status: JobStatus, **kwargs):
         
-        await job_repository.update_job(job_id, update_data)
+    #     update_data = {"status": status}
+    #     update_data.update(kwargs)
+        
+    #     if status in [JobStatus.COMPLETED, JobStatus.FAILED]:
+    #         update_data["completed_at"] = datetime.now().isoformat()
+        
+    #     await job_repository.update_job(job_id, update_data)
 
     async def _update_job_in_redis(self, job_id: str):
         """Helper method để update job in Redis không block"""
@@ -1135,7 +1307,9 @@ class JobService:
         while True:
             try:
                 # Lấy job từ queue
+                print("11")
                 job_data = await self.job_queue.get()
+                print(":", job_data)
                 job_id = job_data["job_id"]
                 # ==========================================
                 print("download image=======================")
@@ -1163,14 +1337,47 @@ class JobService:
                             job_id=job_id
                         )
                         # print("fsfssfsdfsfs: ", list_scene)
-                        await self.update_job_status(
-                            job_id, 
-                            JobStatus.COMPLETED, 
-                            progress=100,
-                            video_path=video_path,
-                            list_scene=list_scene
-                        )
-                        
+                        # ======================================
+                        # max_retries = 5
+                        # retry_delay = 5  # giây
+                        # attempt = 0
+                        # while attempt < max_retries:
+                        #     try:
+                        #         await self.update_job_status(
+                        #             job_id, 
+                        #             JobStatus.COMPLETED, 
+                        #             progress=100,
+                        #             video_path=video_path,
+                        #             list_scene=list_scene
+                        #         )
+                        #         break  
+                        #     except Exception as e:
+                        #         attempt += 1
+                        #         if attempt >= max_retries:
+                        #             print(f"Failed to update job status after {max_retries} attempts: {e}")
+                        #             break
+                        #         print(f"Attempt {attempt} failed: {e}. Retrying in {retry_delay}s...")
+                        #         await asyncio.sleep(retry_delay)
+                        try:
+                            await self.update_job_status(
+                                job_id, 
+                                JobStatus.COMPLETED, 
+                                progress=100,
+                                video_path=video_path,
+                                list_scene=list_scene
+                            )
+                            print(f"Job completed: {job_id}")
+                            
+                        except Exception as e:
+                            print(f"Failed to mark job as completed: {e}")
+                        # await self.update_job_status(
+                        #     job_id, 
+                        #     JobStatus.COMPLETED, 
+                        #     progress=100,
+                        #     video_path=video_path,
+                        #     list_scene=list_scene
+                        # )
+                        #================================================ 
                         print(f"Job completed: {job_id}")
                         
                     except Exception as e:

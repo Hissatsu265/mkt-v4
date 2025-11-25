@@ -3,21 +3,29 @@ from typing import Dict, Any, List, Optional
 from app.models.mongodb import  mongodb
 from app.models.schemas import JobStatus
 import pymongo
-
+import copy
 class JobRepository:
     def __init__(self):
         self.mongodb = mongodb
     
     # ===== VIDEO CREATION JOBS =====
     
+    # async def insert_job(self, job_data: Dict[str, Any]) -> str:
+    #     """Thêm job mới vào MongoDB"""
+    #     try:
+    #         result = await self.mongodb.jobs_col.insert_one(job_data)
+    #         return job_data["job_id"]
+    #     except Exception as e:
+    #         raise Exception(f"Error inserting job: {e}")
     async def insert_job(self, job_data: Dict[str, Any]) -> str:
-        """Thêm job mới vào MongoDB"""
         try:
-            result = await self.mongodb.jobs_col.insert_one(job_data)
+            doc = copy.deepcopy(job_data)  # tránh mutation
+            await self.mongodb.jobs_col.insert_one(doc)
+
             return job_data["job_id"]
         except Exception as e:
             raise Exception(f"Error inserting job: {e}")
-    
+        
     async def find_job_by_id(self, job_id: str) -> Optional[Dict[str, Any]]:
         """Tìm job theo ID"""
         try:
