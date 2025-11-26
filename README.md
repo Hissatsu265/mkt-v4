@@ -5,10 +5,10 @@ API for creating videos from images and audio with transition effects and dolly 
 ## System Requirements
 
 ### Hardware
-- **Storage**: 50GB free space
+- **Storage**: 100GB free space
 
 ### Software
-- **Python**: 3.8+
+- **Python**: 3.10
 - **PyTorch**: 2.8
 - **NumPy**: 1.26.4
 - **CUDA**: 12.8 (recommended)
@@ -26,13 +26,7 @@ cp example.env .env
 # Edit .env file according to your configuration
 ```
 
-### Step 2: Install PyTorch
-
-```bash
-pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu128
-```
-
-### Step 3: Install Required Libraries
+### Step 2: Install Required Libraries
 
 ```bash
 
@@ -50,20 +44,32 @@ pip install python-multipart==0.0.12
 pip install onnx onnxruntime
 pip install mutagen
 pip install mediapipe
+
+pip install -r requirements.txt
+pip install -r requirements0.txt
+pip install -r requirements.txt
+pip install -r requirements1.txt
+pip install onnx onnxruntime
 ```
 
-### Step 4: Download AI Models
+### Step 3: Download AI Models
 
 ```bash
 bash download_model.sh
+bash download_model_image.sh
 ```
 
-### Step 5: Install Custom Nodes
+### Step 4: Install Custom Nodes
 
 ```bash
 bash install_custom_nodes.sh
 ```
 
+### Step 5: Install PyTorch
+
+```bash
+pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
+```
 ---
 
 ## Start API Server
