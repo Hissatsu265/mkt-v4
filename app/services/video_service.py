@@ -593,7 +593,7 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
                     # =======================================================
                     clip_name_test=os.path.join(os.getcwd(), f"{job_id}_clip_{i}_test.mp4")
                     output=await generate_video_cmd(
-                        prompt=video_prompt111,
+                        prompt="The background features soft seasonal lighting, gentle ambient motion, and subtle details that enhance a warm Christmas atmosphere. A stylized cartoon character moves naturally with smooth, mild gestures. Facial features remain calm and steady without exaggerated expressions. Body movements stay relaxed and fluid, creating a believable and festive animated look.",
                         cond_image=result_text2image_path,
                         cond_audio_path=silent_file, 
                         output_path=clip_name_test,
