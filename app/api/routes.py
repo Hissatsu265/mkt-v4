@@ -95,10 +95,56 @@ async def create_video(request: VideoCreateRequest):
    
         request.image_paths = [
             # download_image(img_url) for img_url in request.image_paths
-            img_url for img_url in request.image_paths
+            img_url.strip() for img_url in request.image_paths
         ]
         # request.audio_path = download_audio(request.audio_path)
-        request.audio_path = request.audio_path
+        request.audio_path = request.audio_path.strip()
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to download files: {str(e)}"
+        )
+
+    try:
+        job_id = await job_service.create_job(
+            image_paths=request.image_paths,
+            prompts=request.prompts,
+            audio_path=request.audio_path,
+            resolution=request.resolution
+        )
+
+        queue_info = await job_service.get_queue_info()
+
+        return VideoCreateResponse(
+            job_id=job_id,
+            status=JobStatus.PENDING,
+            message=f"Job created successfully. Position in queue: {queue_info['pending_jobs']}",
+            queue_position=queue_info['pending_jobs'],
+            estimated_wait_time=queue_info['pending_jobs'] * 5
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create job: {str(e)}"
+        )
+@router.post("/videos/create_christmas_campain", response_model=VideoCreateResponse)
+async def create_video(request: VideoCreateRequest):
+    if len(request.image_paths) != len(request.prompts):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Number of images must match number of prompts"
+        )
+
+    try:
+   
+        request.image_paths = [
+            # download_image(img_url) for img_url in request.image_paths
+            img_url.strip() for img_url in request.image_paths
+        ]
+        # request.audio_path = download_audio(request.audio_path)
+        request.audio_path = request.audio_path.strip()
 
     except Exception as e:
         raise HTTPException(

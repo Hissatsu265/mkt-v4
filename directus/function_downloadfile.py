@@ -3,6 +3,8 @@ import os
 import uuid
 from config import BASE_DIR
 def download_image(url: str) -> str:
+   
+    url=url.strip()
     folder_path=str(BASE_DIR)+"/download_images"
     # print("1230000000")
     os.makedirs(folder_path, exist_ok=True)
@@ -16,6 +18,8 @@ def download_image(url: str) -> str:
     return file_path
 
 def download_audio(url: str) -> str:
+    url=url.strip()
+
     folder_path=str(BASE_DIR)+"/download_audios"
     os.makedirs(folder_path, exist_ok=True)
     # print("1222222223")

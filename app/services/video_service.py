@@ -412,8 +412,10 @@ class VideoService:
         # return "https://cms.anymateme.pro/assets/425ad513-d54c-4faa-8098-1b36feb06729",[]
         print("BASEDIR: ",BASE_DIR)
         global full_text_ofauido
+
         full_text_ofauido=""
         jobid, output_filename = self.generate_output_filename()
+
         jobid=job_id
         output_path = self.output_dir / output_filename
         try:
@@ -450,9 +452,10 @@ class VideoService:
 async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_video,resolution):
     generate_output_filename = output_path_video
     list_scene=[]
+    
     if prompts[0]=="" or prompts[0] is None or prompts[0].lower() == "none":
         prompts[0]="A realistic video of a person confidently presenting a product they are holding. The person speaks clearly and professionally, as if explaining the product’s features in an advertisement. Their facial expression remains pleasant and natural, with slight movements to appear engaging but not exaggerated. Their hand gestures are smooth and minimal, focusing attention on the product, creating the impression of a calm and confident presenter in a product promotion video."
-    if get_audio_duration(cond_audio_path) > 9:
+    if get_audio_duration(cond_audio_path) > 90:
         output_directory = "output_segments"
         os.makedirs(output_directory, exist_ok=True)
         output_paths,durations, result = process_audio_file(cond_audio_path, output_directory)
@@ -833,6 +836,11 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
     # =========================================================================================    
 
     else:
+        if event=="Christmas":
+            prompts[0]="A festive cartoon-style video of a character in a holiday environment. The background has subtle ambient motion, soft light shifts, and gentle environmental details to make the scene lively and realistic. The character is standing straight, calm, and natural, without any exaggerated movements or expressions"
+        else:
+            prompts[0]="A realistic video of a person confidently giving a lecture. Their face remains neutral and professional, without expressions or head movement. Their hands moves up and down slowly and naturally to emphasize his words without swinging his arms from side to side, creating the impression of a teacher explaining a lesson."
+        # =================================================================
         audiohavesecondatstart = add_silence_to_start(cond_audio_path, job_id, duration_ms=500)
         generate_output_filename=os.path.join(os.getcwd(), f"{job_id}_noaudio.mp4")
         if wait_for_audio_ready(audiohavesecondatstart, min_size_mb=0.02, max_wait_time=60, min_duration=2.0):
@@ -855,13 +863,9 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
         tempt=trim_video_start(generate_output_filename, duration=0.5)
         output_file = replace_audio_trimmed(generate_output_filename,cond_audio_path,output_path_video)
         try:
-            # print("ssssssssssss")
             os.remove(str(generate_output_filename))
-            # print("000000")
             os.remove(str(audiohavesecondatstart))
-            # print("sdfsd")
             os.remove(str(cond_audio_path))
-            # print("sdf")
             os.remove(str(file_path))
         except Exception as e:
             print(f"❌ Error removing temporary files: {str(e)}")
