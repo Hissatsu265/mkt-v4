@@ -101,7 +101,7 @@ Create a new video from images and audio.
 #### Request:
 
 ```bash
-curl -X POST "https://hailee-unrepresentational-ronnie.ngrok-free.dev/api/v1/videos/create" \
+curl -X POST "https://hailee-unrepresentational-ronnie.ngrok-free.dev/api/v1/videos/create_christmas_campain " \
   -H "Content-Type: application/json" \
   -d '{
     "image_paths": ["https://cms.anymateme.pro/assets/e149cb1f-5b37-44e8-b248-c15bb79e31b6",""],
