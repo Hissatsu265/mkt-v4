@@ -27,6 +27,9 @@ API_PORT = int(os.getenv("API_PORT", 8003))
 JOB_RETENTION_HOURS = int(os.getenv("JOB_RETENTION_HOURS", 24))  # Giữ job trong 24h
 VIDEO_RETENTION_HOURS = int(os.getenv("VIDEO_RETENTION_HOURS", 72))  # Giữ video trong 72h
 CLEANUP_INTERVAL_MINUTES = int(os.getenv("CLEANUP_INTERVAL_MINUTES", 180))  # Cleanup mỗi 60 phút
+
+# RunPod serverless mode
+RUNPOD_MODE = os.getenv("RUNPOD_MODE", "false")  # Enable serverless mode when "true"
 # =======================================
 SERVER_COMFYUI="127.0.0.1:8188"
 WORKFLOW_INFINITETALK_PATH="/workflow/IfiniteTalk_genvideo.json"

@@ -782,7 +782,15 @@ from directus.function_downloadfile import download_image,download_audio
 from datetime import datetime, timedelta
 from typing import Dict, Any
 from pathlib import Path
-import redis.asyncio as redis
+
+# Make redis optional for serverless environments
+try:
+    import redis.asyncio as redis
+    REDIS_AVAILABLE = True
+except ImportError:
+    redis = None
+    REDIS_AVAILABLE = False
+
 from app.models.schemas import JobStatus
 from typing import Dict, Any, List
 from app.models.mongodb import mongodb
