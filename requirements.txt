@@ -30,7 +30,10 @@ torchao
 bitsandbytes
 huggingface_hub
 python-dotenv
-sentencepiece 
+sentencepiece
 protobuf
+mutagen
+librosa
+soundfile
 
 

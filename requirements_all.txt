@@ -1,0 +1,98 @@
+# Core API dependencies (compatible with Gradio 4.44.1)
+fastapi>=0.115.2
+uvicorn[standard]==0.32.0
+pydantic>=2.11.10,<=2.12.4
+pydantic-settings==2.9.1
+python-multipart>=0.0.18
+python-dotenv==1.0.0
+aiofiles>=22.0,<24.0
+
+# Database
+pymongo==4.12.0
+motor==3.7.0
+
+# Queue and caching
+redis==5.2.1
+
+# Authentication
+PyJWT==2.10.1
+
+# Data processing
+numpy>=1.25.0
+pandas==2.0.0
+
+# ML/AI frameworks
+torch==2.8.0
+torchvision==0.23.0
+torchaudio==2.8.0
+transformers>=4.37.2
+diffusers
+accelerate
+huggingface_hub
+hf-transfer
+bitsandbytes
+peft
+torchao
+tokenizers>=0.13.3
+sentencepiece
+protobuf
+safetensors>=0.4.2
+
+# Image processing
+Pillow
+opencv-python
+mediapipe
+pytesseract
+
+# Audio processing
+mutagen
+librosa
+soundfile
+
+# Gradio and UI
+gradio==4.44.1
+gradio_client==1.3.0
+
+# ComfyUI dependencies
+comfyui-frontend-package==1.25.11
+comfyui-workflow-templates==0.1.70
+comfyui-embedded-docs==0.2.6
+einops
+torchsde
+scipy
+tqdm
+psutil
+
+# Database migrations
+alembic
+SQLAlchemy
+
+# Video processing
+av>=14.2.0
+
+# HTTP clients
+requests==2.31.0
+aiohttp>=3.11.8
+yarl>=1.18.0
+
+# Configuration
+pyyaml
+
+# Additional ML tools
+kornia>=0.7.1
+spandrel
+sageattention
+
+# Model inference
+onnx
+onnxruntime
+
+# Utilities
+tiktoken==0.9.0
+pyngrok
+
+# Testing (optional)
+locust
+
+# Discord integration
+discord
