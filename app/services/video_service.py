@@ -423,7 +423,7 @@ class VideoService:
             await job_service.update_job_status(job_id, "processing", progress=0)
 
             list_scene = await run_job(jobid, prompts, image_paths, audio_path, output_path,resolution)  
-            print(str(output_path)) 
+            # print(str(output_path)) 
             # if os.path.exists(str(output_path)):
             #     print("✅ File tồn tại!")
             # else:
@@ -455,7 +455,7 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
     
     if prompts[0]=="" or prompts[0] is None or prompts[0].lower() == "none":
         prompts[0]="A realistic video of a person confidently presenting a product they are holding. The person speaks clearly and professionally, as if explaining the product’s features in an advertisement. Their facial expression remains pleasant and natural, with slight movements to appear engaging but not exaggerated. Their hand gestures are smooth and minimal, focusing attention on the product, creating the impression of a calm and confident presenter in a product promotion video."
-    if get_audio_duration(cond_audio_path) > 90:
+    if get_audio_duration(cond_audio_path) > 10000:
         output_directory = "output_segments"
         os.makedirs(output_directory, exist_ok=True)
         output_paths,durations, result = process_audio_file(cond_audio_path, output_directory)
@@ -836,11 +836,12 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
     # =========================================================================================    
 
     else:
-        if event=="Christmas":
+        if event=="Christmas" and prompts[0].strip()=="":
             prompts[0]="A festive cartoon-style video of a character in a holiday environment. The background has subtle ambient motion, soft light shifts, and gentle environmental details to make the scene lively and realistic. The character is standing straight, calm, and natural, without any exaggerated movements or expressions"
-        else:
+        elif prompts[0].strip()=="":
             prompts[0]="A realistic video of a person confidently giving a lecture. Their face remains neutral and professional, without expressions or head movement. Their hands moves up and down slowly and naturally to emphasize his words without swinging his arms from side to side, creating the impression of a teacher explaining a lesson."
         # =================================================================
+      
         audiohavesecondatstart = add_silence_to_start(cond_audio_path, job_id, duration_ms=500)
         generate_output_filename=os.path.join(os.getcwd(), f"{job_id}_noaudio.mp4")
         if wait_for_audio_ready(audiohavesecondatstart, min_size_mb=0.02, max_wait_time=60, min_duration=2.0):
@@ -1158,11 +1159,11 @@ async def generate_video_cmd(prompt, cond_image, cond_audio_path, output_path, j
                 wf_w = 640
                 wf_h = 640
             elif resolution=="16:9":    
-                wf_w = 1040
-                wf_h = 592 
+                wf_w = 1120
+                wf_h = 640 
             elif resolution=="9:16":
-                wf_w = 640
-                wf_h = 1120
+                wf_w = 592
+                wf_h = 1040
             elif resolution=="720":
                 wf_w = 448
                 wf_h = 800
@@ -1204,11 +1205,11 @@ async def generate_video_cmd(prompt, cond_image, cond_audio_path, output_path, j
             # wf_w = 720
             # wf_h = 1280
             if resolution=="16:9":    
-                wf_w = 1280
-                wf_h = 720 
+                wf_w = 1920
+                wf_h = 1080
             elif resolution=="9:16":
-                wf_w = 720
-                wf_h = 1280
+                wf_w = 1080
+                wf_h = 1920
             await scale_video(
                 input_path=video_path,
                 output_path=output_path,
