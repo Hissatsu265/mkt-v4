@@ -17,9 +17,9 @@ def replace_audio_trimmed(video_path, audio_path, output_path):
     w, h = video.size
 
     if w > h:  # Landscape
-        target_w, target_h = 1280, 720
+        target_w, target_h = 1920, 1080
     else:     
-        target_w, target_h = 720, 1280
+        target_w, target_h = 1080, 1920
 
     if (w, h) != (target_w, target_h):
         x_center, y_center = w / 2, h / 2
