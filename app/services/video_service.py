@@ -453,8 +453,8 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
     generate_output_filename = output_path_video
     list_scene=[]
     
-    if prompts[0]=="" or prompts[0] is None or prompts[0].lower() == "none":
-        prompts[0]="A realistic video of a person confidently presenting a product they are holding. The person speaks clearly and professionally, as if explaining the product’s features in an advertisement. Their facial expression remains pleasant and natural, with slight movements to appear engaging but not exaggerated. Their hand gestures are smooth and minimal, focusing attention on the product, creating the impression of a calm and confident presenter in a product promotion video."
+    # if prompts[0]=="" or prompts[0] is None or prompts[0].lower() == "none":
+    #     prompts[0]="A realistic video of a person confidently presenting a product they are holding. The person speaks clearly and professionally, as if explaining the product’s features in an advertisement. Their facial expression remains pleasant and natural, with slight movements to appear engaging but not exaggerated. Their hand gestures are smooth and minimal, focusing attention on the product, creating the impression of a calm and confident presenter in a product promotion video."
     if get_audio_duration(cond_audio_path) > 10000:
         output_directory = "output_segments"
         os.makedirs(output_directory, exist_ok=True)
