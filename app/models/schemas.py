@@ -2,6 +2,18 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 from enum import Enum
 
+class Character(str, Enum):
+    santa = "santa"
+    snowman = "snowman"
+    elf = "elf"
+    reindeer = "reindeer"
+class Background(str, Enum):
+    indoor = "indoor"
+    town = "town"
+    forest = "northern"
+    workshop = "workshop"
+    
+
 class Resolution(str, Enum):
     RATIO_169 = "16:9"
     HD_720P = "720"
@@ -15,11 +27,20 @@ class JobStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
 
+# class VideoCreateRequest(BaseModel):
+#     image_paths: List[str]
+#     prompts: List[str]
+#     audio_path: str
+#     resolution: Resolution = Resolution.RATIO_916
+#     character: Optional[str] = None
+#     background: Optional[str] = None
 class VideoCreateRequest(BaseModel):
     image_paths: List[str]
     prompts: List[str]
     audio_path: str
     resolution: Resolution = Resolution.RATIO_916
+    character: Optional[Character] = None
+    background: Optional[Background] = None
 
 class VideoCreateResponse(BaseModel):
     job_id: str

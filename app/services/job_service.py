@@ -1090,10 +1090,8 @@ class JobService:
     #     asyncio.create_task(self.start_cleanup_task())
         
     #     return job_id
-    async def create_job(self, image_paths: list, prompts: list, audio_path: str, resolution: str = "1920x1080") -> str:
-        """Tạo job mới - LƯU VÀO MONGODB với retry"""
+    async def create_job(self, image_paths: list, prompts: list, audio_path: str, resolution: str = "1920x1080",background:str="",character:str="") -> str:
         job_id = str(uuid.uuid4())
-        
         job_data = {
             "job_id": job_id,
             "status": JobStatus.PENDING,
@@ -1106,7 +1104,9 @@ class JobService:
             "error_message": None,
             "created_at": datetime.now().isoformat(),
             "completed_at": None,
-            "queue_position": self.job_queue.qsize() + 1
+            "queue_position": self.job_queue.qsize() + 1,
+            "background":background,
+            "character":character
         }
         
         async def _insert_job():
@@ -1315,9 +1315,7 @@ class JobService:
         while True:
             try:
                 # Lấy job từ queue
-                print("11")
                 job_data = await self.job_queue.get()
-                print(":", job_data)
                 job_id = job_data["job_id"]
                 # ==========================================
                 print("download image=======================")
@@ -1342,7 +1340,9 @@ class JobService:
                             prompts=job_data["prompts"],
                             audio_path=audio_path_down,
                             resolution=job_data["resolution"],
-                            job_id=job_id
+                            job_id=job_id,
+                            character=job_data.get("character",""),
+                            background=job_data.get("background","")
                         )
                         # print("fsfssfsdfsfs: ", list_scene)
                         # ======================================

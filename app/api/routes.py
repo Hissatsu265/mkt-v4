@@ -157,7 +157,9 @@ async def create_video(request: VideoCreateRequest):
             image_paths=request.image_paths,
             prompts=request.prompts,
             audio_path=request.audio_path,
-            resolution=request.resolution
+            resolution=request.resolution,
+            background=request.background,
+            character=request.character
         )
 
         queue_info = await job_service.get_queue_info()

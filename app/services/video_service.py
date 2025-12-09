@@ -395,6 +395,23 @@ def custom_random_sequence111(n):
     return [9,9,9,9,9,9,9,1,5][:n]  
     # return [2,3,4,2,3,4,2,3,4,2,3,4][:n]
 
+def get_video_path(resolution: str, character, background):
+    BASE_DIR11=str(BASE_DIR)+"/intro_vid"
+    char_name = character.value if hasattr(character, "value") else character
+    bg_name = background.value if hasattr(background, "value") else background
+
+    target_dir = os.path.join(BASE_DIR11, resolution, char_name, bg_name)
+
+    if not os.path.isdir(target_dir):
+        return None
+
+    videos = [
+        f for f in os.listdir(target_dir)
+        if f.lower().endswith((".mp4", ".mov", ".mkv"))
+    ]
+    if not videos:
+        return None
+    return os.path.join(target_dir, random.choice(videos))
 class VideoService:
     def __init__(self):
         from config import OUTPUT_DIR
@@ -405,8 +422,12 @@ class VideoService:
         timestamp = int(asyncio.get_event_loop().time())
         return unique_id, f"video_{timestamp}_{unique_id}.mp4"
 
-    async def create_video(self, image_paths: List[str], prompts: List[str], audio_path: str, resolution: str, job_id: str) -> str:
-        # import time
+    async def create_video(self, image_paths: List[str], prompts: List[str], audio_path: str, resolution: str, job_id: str,background:str,character:str) -> str:
+        # print("Starting video creation...")
+        # print(character)
+        # print(background)
+        # print(resolution)
+        
         # time.sleep(2)
         # await job_service.update_job_status(job_id, "processing", progress=0)
         # return "https://cms.anymateme.pro/assets/425ad513-d54c-4faa-8098-1b36feb06729",[]
@@ -421,19 +442,9 @@ class VideoService:
         try:
             
             await job_service.update_job_status(job_id, "processing", progress=0)
-
-            list_scene = await run_job(jobid, prompts, image_paths, audio_path, output_path,resolution)  
-            # print(str(output_path)) 
-            # if os.path.exists(str(output_path)):
-            #     print("✅ File tồn tại!")
-            # else:
-            #     print("❌ File không tồn tại.")
-            # return str(output_path),list_scene
+            list_scene = await run_job(jobid, prompts, image_paths, audio_path, output_path,resolution,character,background)    
             path_directus= Uploadfile_directus(str(output_path))
-            # if os.path.exists(str(output_path)):
-            #     print("✅ File tồn tại!")
-            # else:
-            #     print("❌ File không tồn tại.")
+
             if path_directus is not None and output_path.exists() :
                 print(f"Video upload successfully: {path_directus}")
                 print(f"Job ID: {job_id}, Output Path: {path_directus}")
@@ -449,7 +460,7 @@ class VideoService:
             if output_path.exists():
                 output_path.unlink()
             raise e
-async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_video,resolution):
+async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_video,resolution,character,background):
     generate_output_filename = output_path_video
     list_scene=[]
     
@@ -757,7 +768,7 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
             #         y_pos  
             #     )
             # ================================================================
-            print(list_random,"]]]]]]]]]]]]]]]]]]]]]]]]]ư")
+            # print(list_random,"]]]]]]]]]]]]]]]]]]]]]]]]]ư")
             trim_video_start(clip_name, duration=0.5)
             output_file=cut_video(clip_name, get_audio_duration(output_path)-0.5) 
             results.append(output_file)
@@ -836,10 +847,28 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
     # =========================================================================================    
 
     else:
+        # ===========================================================
+        path_intovid_base_resolution="916"
+        if resolution=="16:9":
+            path_intovid_base_resolution="169"
+        video_intro = get_video_path(
+            resolution=path_intovid_base_resolution,
+            character=character,
+            background=background
+        )
+        # if video:
+        #     print("Found video:", video)
+        # else:
+        #     print("No video available")
+        # ===========================================================
         if event=="Christmas" and prompts[0].strip()=="":
             prompts[0]="A festive cartoon-style video of a character in a holiday environment. The background has subtle ambient motion, soft light shifts, and gentle environmental details to make the scene lively and realistic. The character is standing straight, calm, and natural, without any exaggerated movements or expressions"
+            print("use base promtp")
         elif prompts[0].strip()=="":
             prompts[0]="A realistic video of a person confidently giving a lecture. Their face remains neutral and professional, without expressions or head movement. Their hands moves up and down slowly and naturally to emphasize his words without swinging his arms from side to side, creating the impression of a teacher explaining a lesson."
+        if background=="workshop" and prompts[0].strip()=="":
+            prompts[0]="A festive cartoon style video of a character in a holiday workshop environment. The background shows soft ambient motion, warm light shifts, and gentle environmental details to keep the scene lively and believable. The character stands straight, calm, and natural, without exaggerated movements or expressions. In the background, a small wooden toy car moves across the scene one time then stop, passing smoothly behind the character without drawing too much attention."
+            print("use prompt of workshop")
         # =================================================================
       
         audiohavesecondatstart = add_silence_to_start(cond_audio_path, job_id, duration_ms=500)
@@ -851,6 +880,7 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
         file_path = str(cond_images[0])
         file_root, file_ext = os.path.splitext(file_path)
         await job_service.update_job_status(job_id, "processing", progress=50)
+        
         output=await generate_video_cmd(
             prompt=prompts[0], 
             cond_image=file_path, 
@@ -859,10 +889,32 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
             job_id=job_id,
             resolution=resolution
         )  
+        print("htdhh")
         await job_service.update_job_status(job_id, "processing", progress=97)
+
         from utilities.merge_video_audio import replace_audio_trimmed
         tempt=trim_video_start(generate_output_filename, duration=0.5)
+        print("ggdxg")
         output_file = replace_audio_trimmed(generate_output_filename,cond_audio_path,output_path_video)
+        print("rdg")
+        print(output_file)
+        print(output_path_video)
+        # ===========================transition==================================
+        from utilities.mergeintro import merge_videos
+        if video_intro:
+            await asyncio.to_thread(
+                merge_videos,
+                str(video_intro),
+                str(output_path_video)
+            )
+        else:
+            print("No video intro available")
+        print("dgf")
+        print(output_path_video)
+        if os.path.exists(output_path_video):
+            print("File tồn tại")
+        else:
+            print("File không tồn tại")
         try:
             os.remove(str(generate_output_filename))
             os.remove(str(audiohavesecondatstart))
