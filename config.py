@@ -32,7 +32,7 @@ CLEANUP_INTERVAL_MINUTES = int(os.getenv("CLEANUP_INTERVAL_MINUTES", 180))  # Cl
 RUNPOD_MODE = os.getenv("RUNPOD_MODE", "false")  # Enable serverless mode when "true"
 # =======================================
 SERVER_COMFYUI="127.0.0.1:8188"
-WORKFLOW_INFINITETALK_PATH="/workflow/IfiniteTalk_genvideo.json"
+WORKFLOW_INFINITETALK_PATH="/workflow/InfiniteTalk_api_ver2.json"
 # =======================================
 from dotenv import load_dotenv
 import os

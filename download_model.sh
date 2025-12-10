@@ -51,4 +51,11 @@ wget -nc -O "$DIFFUSION_DIR/Wan2_1-InfiniteTalk_Single_Q8.gguf" \
 wget -nc -O "$LORA_DIR/lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors" \
 "https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/Lightx2v/lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors"
 
+
+mkdir -p "$BASE_DIR/wav2vec2"
+# Tải file wav2vec2 từ Hugging Face
+wget -O "$BASE_DIR/wav2vec2/wav2vec2-chinese-base_fp16.safetensors" \
+"https://huggingface.co/Kijai/wav2vec2_safetensors/resolve/main/wav2vec2-chinese-base_fp16.safetensors"
+
+
 echo "✅ All models downloaded successfully!"
