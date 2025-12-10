@@ -42,7 +42,9 @@ echo ""
 echo "Step 4: Installing core dependencies..."
 $PYTHON_CMD -m pip install opencv-python einops
 # Install sageattention without build isolation (it needs torch during build)
-$PYTHON_CMD -m pip install --no-build-isolation sageattention
+# Note: sageattention requires CUDA/GPU support, skip if not available
+echo "Attempting to install sageattention (GPU-only, may fail on CPU)..."
+$PYTHON_CMD -m pip install --no-build-isolation sageattention || echo "Warning: sageattention installation failed (GPU required). Continuing without it..."
 echo ""
 
 # Install specific versions of critical packages (compatible with Gradio 4.44.1)
