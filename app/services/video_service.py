@@ -863,12 +863,12 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
         # ===========================================================
         if event=="Christmas" and prompts[0].strip()=="":
             prompts[0]="A festive cartoon-style video of a character in a holiday environment. The background has subtle ambient motion, soft light shifts, and gentle environmental details to make the scene lively and realistic. The character is standing straight, calm, and natural, without any exaggerated movements or expressions"
-            print("use base promtp")
+            # print("use base promtp")
         elif prompts[0].strip()=="":
             prompts[0]="A realistic video of a person confidently giving a lecture. Their face remains neutral and professional, without expressions or head movement. Their hands moves up and down slowly and naturally to emphasize his words without swinging his arms from side to side, creating the impression of a teacher explaining a lesson."
         if background=="workshop" and prompts[0].strip()=="":
             prompts[0]="A festive cartoon style video of a character in a holiday workshop environment. The background shows soft ambient motion, warm light shifts, and gentle environmental details to keep the scene lively and believable. The character stands straight, calm, and natural, without exaggerated movements or expressions. In the background, a small wooden toy car moves across the scene one time then stop, passing smoothly behind the character without drawing too much attention."
-            print("use prompt of workshop")
+            # print("use prompt of workshop")
         # =================================================================
       
         audiohavesecondatstart = add_silence_to_start(cond_audio_path, job_id, duration_ms=500)
@@ -889,16 +889,12 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
             job_id=job_id,
             resolution=resolution
         )  
-        print("htdhh")
         await job_service.update_job_status(job_id, "processing", progress=97)
 
         from utilities.merge_video_audio import replace_audio_trimmed
         tempt=trim_video_start(generate_output_filename, duration=0.5)
-        print("ggdxg")
         output_file = replace_audio_trimmed(generate_output_filename,cond_audio_path,output_path_video)
-        print("rdg")
-        print(output_file)
-        print(output_path_video)
+
         # ===========================transition==================================
         from utilities.mergeintro import merge_videos
         if video_intro:
@@ -909,8 +905,6 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
             )
         else:
             print("No video intro available")
-        print("dgf")
-        print(output_path_video)
         if os.path.exists(output_path_video):
             print("File tồn tại")
         else:
