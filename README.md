@@ -107,7 +107,9 @@ curl -X POST "https://hailee-unrepresentational-ronnie.ngrok-free.dev/api/v1/vid
     "image_paths": ["https://cms.anymateme.pro/assets/e149cb1f-5b37-44e8-b248-c15bb79e31b6",""],
     "prompts": ["",""],
     "audio_path": "https://cms.anymateme.pro/assets/fba5eb69-d9aa-4280-9d10-c8de363c0e50",
-    "resolution": "9:16"
+    "resolution": "9:16",
+    "background":"northern",
+    "character":"santa"
 }'
 ```
 
@@ -124,6 +126,19 @@ curl -X POST "https://hailee-unrepresentational-ronnie.ngrok-free.dev/api/v1/vid
 
 - `16:9` - Landscape (Horizontal)
 - `9:16` - Portrait (Vertical)
+
+#### Supported background and character:
+`Background`
+- indoor
+- town
+- northern
+- workshop
+
+`Character`
+- santa
+- snowman
+- elf
+- reindeer
 
 #### Response:
 
