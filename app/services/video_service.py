@@ -865,10 +865,19 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
             prompts[0]="A festive cartoon-style video of a character in a holiday environment. The background has subtle ambient motion, soft light shifts, and gentle environmental details to make the scene lively and realistic. The character is standing straight, calm, and natural, without any exaggerated movements or expressions"
             # print("use base promtp")
         elif prompts[0].strip()=="":
+
             prompts[0]="A realistic video of a person confidently giving a lecture. Their face remains neutral and professional, without expressions or head movement. Their hands moves up and down slowly and naturally to emphasize his words without swinging his arms from side to side, creating the impression of a teacher explaining a lesson."
-        if background=="workshop" and prompts[0].strip()=="":
+
+        if background=="workshop" and event=="Christmas":
             prompts[0]="A festive cartoon style video of a character in a holiday workshop environment. The background shows soft ambient motion, warm light shifts, and gentle environmental details to keep the scene lively and believable. The character stands straight, calm, and natural, without exaggerated movements or expressions. In the background, a small wooden toy car moves across the scene one time then stop, passing smoothly behind the character without drawing too much attention."
-            # print("use prompt of workshop")
+        elif background=="northern" and event=="Christmas":
+            prompts[0]="A charming cartoon style holiday video where the environment feels gently alive. Tree decorations shimmer with mild blinking patterns, soft light ripples across the snow, and tiny particles float slowly in the air. The character holds a steady stance, appearing calm and natural."
+        #     print("use prompt of workshop")
+        # print( prompts[0])
+        # print(background)
+        # print(character)
+        # import time
+        time.sleep(15)
         # =================================================================
       
         audiohavesecondatstart = add_silence_to_start(cond_audio_path, job_id, duration_ms=500)
