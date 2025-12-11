@@ -27,56 +27,16 @@ cp example.env .env
 ```
 
 ### Step 2: Install Required Libraries
-
 ```bash
-
-pip install opencv-python sageattention
-pip install einops
-pip install pymongo
-pip install motor
-pip install --upgrade pip
-pip install fastapi==0.115.0
-pip install uvicorn[standard]==0.32.0  
-pip install pydantic==2.11.7
-pip install redis==5.2.1
-pip install aiofiles==24.1.0
-pip install python-multipart==0.0.12
-pip install onnx onnxruntime
-pip install mutagen
-pip install mediapipe
-pip install pyngrok
-
-pip install -r requirements.txt
-pip install -r requirements0.txt
-pip install -r requirements.txt
-pip install -r requirements1.txt
-pip install onnx onnxruntime
+bash install_requirements.sh
 ```
 
 ### Step 3: Download AI Models
 
 ```bash
 bash download_model.sh
-bash download_model_image.sh
 ```
 
-### Step 4: Install Custom Nodes
-
-```bash
-bash install_custom_nodes.sh
-```
-
-### Step 5: Install PyTorch
-
-```bash
-pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
-```
-
-### Step 6: Add ngok token 
-
-```bash
-ngrok config add-authtoken 33ooTAhfqqhfHoWrrkThLxy4niD_H8N9ENov1PVdpbL3yywF
-```
 
 ---
 
@@ -86,7 +46,7 @@ ngrok config add-authtoken 33ooTAhfqqhfHoWrrkThLxy4niD_H8N9ENov1PVdpbL3yywF
 python run.py
 ```
 
-API will run at: `https://hailee-unrepresentational-ronnie.ngrok-free.dev ` and ` http://localhost:8003`
+API will run at: `https://hailee-unrepresentational-ronnie.ngrok-free.dev ` and ` http://localhost:6001`
 
 ---
 
@@ -121,7 +81,8 @@ curl -X POST "https://hailee-unrepresentational-ronnie.ngrok-free.dev/api/v1/vid
 | `prompts` | array | ❌ | List of prompts for each image (optional, can be empty `""`) |
 | `audio_path` | string | ✅ | Local audio file path |
 | `resolution` | string | ✅ | Output video aspect ratio |
-
+| `background` | string | ✅ | backgroudn |
+| `character` | string | ✅ | character |
 #### Supported Resolutions:
 
 - `16:9` - Landscape (Horizontal)

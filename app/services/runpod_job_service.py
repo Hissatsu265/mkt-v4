@@ -65,6 +65,8 @@ class RunPodJobService:
             "image_paths": input_data["image_paths"],
             "prompts": input_data.get("prompts", [""]),
             "audio_path": input_data["audio_path"],
+            "background": input_data["background"],  
+            "character": input_data["character"],
             "resolution": input_data.get("resolution", "9:16"),
             "progress": 0,
             "video_path": None,
@@ -144,7 +146,9 @@ class RunPodJobService:
                 prompts=job_data["prompts"],
                 audio_path=job_data["audio_path"],
                 resolution=job_data["resolution"],
-                job_id=job_id
+                job_id=job_id,
+                background=job_data["background"],    # ← THÊM
+                character=job_data["character"]
             )
 
             print(f"[RunPodJobService] Video generated: {video_path}")

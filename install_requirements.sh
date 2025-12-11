@@ -1,79 +1,158 @@
 #!/bin/bash
+# ==============================================
+# Script: install_all_libraries.sh
+# Purpose: Install all libraries and custom nodes
+# ==============================================
 
-# Script to install all requirements for Video Generation API
-# Created: 2025-12-05
+set -e  # Stop script if error occurs
 
-set -e  # Exit on error
+echo "🚀 Starting installation of all libraries..."
+echo "================================================"
 
-echo "=========================================="
-echo "Video Generation API - Install Requirements"
-echo "=========================================="
+# ==============================================
+# STEP 1: INSTALL PYTORCH FIRST (REQUIRED BY OTHER LIBRARIES)
+# ==============================================
 echo ""
+echo "📦 STEP 1: Installing PyTorch with CUDA 12.8 (Required first)"
+echo "------------------------------------------------"
 
-# Check if Python is available
-if ! command -v python &> /dev/null && ! command -v python3 &> /dev/null; then
-    echo "Error: Python is not installed or not in PATH"
-    exit 1
+echo "⬇️  Installing PyTorch, TorchVision, TorchAudio..."
+pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
+
+echo "✅ Step 1 completed!"
+
+# ==============================================
+# STEP 2: INSTALL BASIC LIBRARIES
+# ==============================================
+echo ""
+echo "📦 STEP 2: Installing basic libraries"
+echo "------------------------------------------------"
+
+echo "⬇️  Installing opencv-python and sageattention..."
+pip install opencv-python 
+echo "⬇️  Installing einops..."
+pip install einops
+
+echo "⬇️  Installing pymongo..."
+pip install pymongo
+
+echo "⬇️  Installing motor..."
+pip install motor
+
+echo "⬇️  Upgrading pip..."
+pip install --upgrade pip
+
+echo "⬇️  Installing FastAPI and web libraries..."
+pip install fastapi==0.115.0
+pip install uvicorn[standard]==0.32.0
+pip install pydantic==2.11.7
+
+echo "⬇️  Installing Redis..."
+pip install redis==5.2.1
+
+echo "⬇️  Installing aiofiles..."
+pip install aiofiles==24.1.0
+
+echo "⬇️  Installing python-multipart..."
+pip install python-multipart==0.0.12
+
+echo "⬇️  Installing ONNX..."
+pip install onnx onnxruntime
+
+echo "⬇️  Installing mutagen..."
+pip install mutagen
+
+echo "⬇️  Installing mediapipe..."
+pip install mediapipe
+
+echo "⬇️  Installing pyngrok..."
+pip install pyngrok
+
+echo "⬇️  Installing from requirements files..."
+if [ -f "requirements.txt" ]; then
+    pip install -r requirements.txt
+else
+    echo "⚠️  requirements.txt not found"
 fi
 
-# Use python3 if available, otherwise python
-PYTHON_CMD=$(command -v python3 || command -v python)
-echo "Using Python: $PYTHON_CMD"
-echo "Python version: $($PYTHON_CMD --version)"
-echo ""
+if [ -f "requirements0.txt" ]; then
+    pip install -r requirements0.txt
+else
+    echo "⚠️  requirements0.txt not found"
+fi
 
-# Upgrade pip
-echo "Step 1: Upgrading pip..."
-$PYTHON_CMD -m pip install --upgrade pip
-echo ""
+if [ -f "requirements1.txt" ]; then
+    pip install -r requirements1.txt
+else
+    echo "⚠️  requirements1.txt not found"
+fi
 
-# Install PyTorch FIRST (required by sageattention and other packages)
-echo "Step 2: Installing PyTorch with CUDA 12.8 support..."
-echo "This is required before installing other dependencies."
-$PYTHON_CMD -m pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
-echo ""
+echo "✅ Step 2 completed!"
 
-# Install Gradio first with pinned version (to set dependency constraints)
-echo "Step 3: Installing Gradio with pinned version..."
-$PYTHON_CMD -m pip install gradio==4.44.1 gradio_client==1.3.0
+# ==============================================
+# STEP 3: INSTALL CUSTOM NODES
+# ==============================================
 echo ""
+echo "📦 STEP 3: Installing Custom Nodes"
+echo "------------------------------------------------"
 
-# Install core dependencies that depend on PyTorch
-echo "Step 4: Installing core dependencies..."
-$PYTHON_CMD -m pip install opencv-python einops
-# Install sageattention without build isolation (it needs torch during build)
-# Note: sageattention requires CUDA/GPU support, skip if not available
-echo "Attempting to install sageattention (GPU-only, may fail on CPU)..."
-$PYTHON_CMD -m pip install --no-build-isolation sageattention || echo "Warning: sageattention installation failed (GPU required). Continuing without it..."
-echo ""
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CUSTOM_NODES_DIR="$SCRIPT_DIR/ComfyUI/custom_nodes"
 
-# Install specific versions of critical packages (compatible with Gradio 4.44.1)
-echo "Step 5: Installing FastAPI and Uvicorn..."
-$PYTHON_CMD -m pip install "fastapi>=0.115.2" "uvicorn[standard]==0.32.0" "pydantic>=2.11.10,<=2.12.4"
-echo ""
+if [ -d "$CUSTOM_NODES_DIR" ]; then
+    echo "📂 Custom nodes path: $CUSTOM_NODES_DIR"
+    cd "$CUSTOM_NODES_DIR" || { echo "❌ Cannot access custom_nodes directory!"; exit 1; }
+    
+    # List of custom nodes to install
+    NODES=(
+        "ComfyUI-WanVideoWrapper"
+        "InfiniteTalk"
+        "audio-separation-nodes-comfyui"
+        "comfyui-kjnodes"
+        "comfyui-videohelpersuite"
+        "ComfyUI-MelBandRoFormer"
+    )
+    
+    # Loop through each node
+    for NODE in "${NODES[@]}"; do
+        NODE_PATH="$CUSTOM_NODES_DIR/$NODE"
+        REQ_FILE="$NODE_PATH/requirements.txt"
+        
+        if [ -d "$NODE_PATH" ]; then
+            echo "-------------------------------------------------"
+            echo "📦 Processing: $NODE"
+            cd "$NODE_PATH" || continue
+            
+            if [ -f "$REQ_FILE" ]; then
+                echo "📘 Installing libraries from $REQ_FILE..."
+                pip install -r requirements.txt --no-cache-dir
+            else
+                echo "⚠️  No requirements.txt file in $NODE"
+            fi
+            
+            cd "$CUSTOM_NODES_DIR" || exit
+        else
+            echo "⚠️  Skipping: $NODE (directory does not exist)"
+        fi
+    done
+    
+    echo "✅ Step 3 completed!"
+else
+    echo "⚠️  ComfyUI/custom_nodes directory not found, skipping this step"
+fi
 
-# Install database and queue
-echo "Step 6: Installing database and queue dependencies..."
-$PYTHON_CMD -m pip install pymongo motor redis==5.2.1
+# ==============================================
+# COMPLETED
+# ==============================================
 echo ""
-
-# Install utilities
-echo "Step 7: Installing utilities..."
-$PYTHON_CMD -m pip install "aiofiles>=22.0,<24.0" "python-multipart>=0.0.18" onnx onnxruntime mutagen mediapipe pyngrok
+echo "================================================"
+echo "🎉 ALL LIBRARIES INSTALLED SUCCESSFULLY!"
+echo "================================================"
 echo ""
-
-# Install all remaining requirements from consolidated file
-echo "Step 8: Installing remaining requirements from requirements_all.txt..."
-$PYTHON_CMD -m pip install -r requirements_all.txt
+echo "📋 Summary:"
+echo "  ✓ PyTorch with CUDA 12.8 installed"
+echo "  ✓ Basic libraries installed"
+echo "  ✓ Custom nodes installed (if available)"
 echo ""
-
-echo "=========================================="
-echo "Installation completed successfully!"
-echo "=========================================="
-echo ""
-echo "Next steps:"
-echo "1. Configure .env file: cp example.env .env"
-echo "2. Download models: bash download_model.sh && bash download_model_image.sh"
-echo "3. Install custom nodes: bash install_custom_nodes.sh"
-echo "4. Start the API: python run.py"
+echo "💡 Tip: Verify installation with: python -c 'import torch; print(torch.cuda.is_available())'"
 echo ""
