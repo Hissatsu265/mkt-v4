@@ -870,8 +870,8 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
 
         if background=="workshop" and event=="Christmas":
             prompts[0]="A festive cartoon style video of a character in a holiday workshop environment. The background shows soft ambient motion, warm light shifts, and gentle environmental details to keep the scene lively and believable. The character stands straight, calm, and natural, without exaggerated movements or expressions. In the background, a small wooden toy car moves across the scene one time then stop, passing smoothly behind the character without drawing too much attention."
-        elif background=="northern" and event=="Christmas":
-            prompts[0]="A charming cartoon style holiday video where the environment feels gently alive. Tree decorations shimmer with mild blinking patterns, soft light ripples across the snow, and tiny particles float slowly in the air. The character holds a steady stance, appearing calm and natural."
+        # elif background=="northern" and event=="Christmas":
+        #     prompts[0]="A charming cartoon style holiday video where the environment feels gently alive. Tree decorations shimmer with mild blinking patterns, soft light ripples across the snow, and tiny particles float slowly in the air. The character holds a steady stance, appearing calm and natural."
         #     print("use prompt of workshop")
         # print( prompts[0])
         # print(background)
