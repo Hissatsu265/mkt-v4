@@ -1121,59 +1121,12 @@ async def find_latest_video(prefix, output_dir=str(BASE_DIR / "ComfyUI/output"))
 
 # ========== Hàm chính được cập nhật ==========
 async def generate_video_cmd(prompt, cond_image, cond_audio_path, output_path, job_id,resolution,negative_prompt=""):
-    comfy_process = await start_comfyui()
-    # await asyncio.sleep(20)  # đợi server ComfyUI khởi động (có thể tăng nếu load model chậm)
+    # comfy_process = await start_comfyui()
 
     try:
         print("🔄 Loading workflow...")
         workflow = await load_workflow(str(BASE_DIR) + "/" + WORKFLOW_INFINITETALK_PATH)  
-        # print("999999999999999999999",workflow)
-
-# ===========================================================================
-        # workflow["203"]["inputs"]["image"] = cond_image
-        # workflow["125"]["inputs"]["audio"] = cond_audio_path
-        
-        # if prompt.strip() == "" or prompt is None or prompt == "none":
-        #     # workflow["135"]["inputs"]["positive_prompt"] = "Mouth moves in sync with speech. A person is sitting in a side-facing position, with their face turned toward the left side of the frame and the eyes look naturally forward in that left-facing direction without shifting. Speaking naturally, as if having a conversation. He always kept his posture and gaze straight without turning his head."    
-        #     workflow["135"]["inputs"]["positive_prompt"] = "Mouth moves in sync with speech. A person is sitting in a side-facing position, with their face turned toward the left side of the frame and the eyes look naturally forward in that left-facing direction without shifting. Speaking naturally, as if having a conversation. He mostly keeps his posture and gaze straight without turning his head, but occasionally makes small, natural gestures with the head or hands to emphasize the speech, adding subtle liveliness to the video."    
-        # else:
-        #     workflow["135"]["inputs"]["positive_prompt"] = prompt
-            
-        # workflow["135"]["inputs"]["negative_prompt"] = "change perspective, bright tones, overexposed, static, blurred details, subtitles, style, works, paintings, images, static, overall gray, worst quality, low quality, JPEG compression residue, ugly, incomplete, extra fingers, poorly drawn hands, poorly drawn faces, deformed, disfigured, misshapen limbs, fused fingers, still picture, messy background, three legs, many people in the background, walking backwards"
-        # wf_h=448
-        # wf_w=448
-        # if resolution == "1080x1920":
-        #     wf_w = 1080
-        #     wf_h = 1920
-        # elif resolution=="1920x1080":
-        #     wf_w = 1920
-        #     wf_h = 1080
-        # elif resolution=="720x1280":
-        #     wf_w = 720
-        #     wf_h = 1280
-        #     # workflow["208"]["inputs"]["frame_window_size"] = 41
-        # elif resolution=="480x854": 
-        #     wf_w = 480
-        #     wf_h = 854
-        # elif resolution=="854x480": 
-        #     wf_w = 854
-        #     wf_h = 480
-        # elif resolution=="1280x720":    
-        #     wf_w = 1280
-        #     wf_h = 720 
-        
-        #     # workflow["208"]["inputs"]["frame_window_size"] = 41
-        # img = Image.open(cond_image)
-        # width_real, height_real = img.size
-        # workflow["211"]["inputs"]["value"] = width_real
-        # workflow["212"]["inputs"]["value"] = height_real
-
-        # workflow["211"]["inputs"]["value"] = 608
-        # workflow["212"]["inputs"]["value"] = 608
-        # img.close()
-        # prefix = job_id
-        # workflow["131"]["inputs"]["filename_prefix"] = prefix
-
+       
 # ===========================================================================
         workflow["284"]["inputs"]["image"] = cond_image
         workflow["125"]["inputs"]["audio"] = cond_audio_path
@@ -1278,7 +1231,8 @@ async def generate_video_cmd(prompt, cond_image, cond_audio_path, output_path, j
             print("❌ Cannot findout video")
             return None
     finally:
-        await stop_comfyui(comfy_process)
+        # await stop_comfyui(comfy_process)
+        print("✅ Finished generate_video_cmd")
 
 async def move_file_async(src_path, dst_path):
     def move_file():
