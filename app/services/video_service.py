@@ -5,7 +5,7 @@ from typing import List
 import subprocess
 import json
 import random
-
+import psutil
 from app.models.schemas import TransitionEffect
 
 import aiohttp
@@ -37,6 +37,7 @@ image_paths_product_rout360=[]
 video_paths_product_rout360=[]
 event="Christmas"
 full_text_ofauido=""
+first_time_gen=True
 import cv2
 import numpy as np
 
@@ -443,8 +444,9 @@ class VideoService:
             
             await job_service.update_job_status(job_id, "processing", progress=0)
             list_scene = await run_job(jobid, prompts, image_paths, audio_path, output_path,resolution,character,background)    
-            path_directus= Uploadfile_directus(str(output_path))
+            print("Uploading video to Directus...")
 
+            path_directus= Uploadfile_directus(str(output_path))
             if path_directus is not None and output_path.exists() :
                 print(f"Video upload successfully: {path_directus}")
                 print(f"Job ID: {job_id}, Output Path: {path_directus}")
@@ -903,7 +905,7 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
         from utilities.merge_video_audio import replace_audio_trimmed
         tempt=trim_video_start(generate_output_filename, duration=0.5)
         output_file = replace_audio_trimmed(generate_output_filename,cond_audio_path,output_path_video)
-
+        print("===>done replace audio")
         # ===========================transition==================================
         from utilities.mergeintro import merge_videos
         if video_intro:
@@ -914,6 +916,7 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
             )
         else:
             print("No video intro available")
+        print("===>done merge intro")
         if os.path.exists(output_path_video):
             print("File tồn tại")
         else:
@@ -925,7 +928,7 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
             os.remove(str(file_path))
         except Exception as e:
             print(f"❌ Error removing temporary files: {str(e)}")
-        
+        print("===>done remove temp")
         return list_scene
 # ============================================================================================
 
@@ -941,7 +944,7 @@ import signal
 #     print("🚀 ComfyUI started (PID:", process.pid, ")")
 #     return process
 import socket
-async def wait_for_port_async(host: str, port: int, timeout: int = 60) -> bool:
+async def wait_for_port_async(host: str, port: int, timeout: int = 200) -> bool:
  
     start_time = time.time()
     while time.time() - start_time < timeout:
@@ -967,7 +970,7 @@ async def start_comfyui():
 
     print(f"🚀 ComfyUI started (PID: {process.pid}) — đang chờ server mở port {PORT}...")
 
-    ready = await wait_for_port_async(HOST, PORT, timeout=120)
+    ready = await wait_for_port_async(HOST, PORT, timeout=300)
 
     if not ready:
         print("⚠️ ComfyUI không khởi động được đúng cách (port không mở).")
@@ -1121,7 +1124,10 @@ async def find_latest_video(prefix, output_dir=str(BASE_DIR / "ComfyUI/output"))
 
 # ========== Hàm chính được cập nhật ==========
 async def generate_video_cmd(prompt, cond_image, cond_audio_path, output_path, job_id,resolution,negative_prompt=""):
-    # comfy_process = await start_comfyui()
+    global first_time_gen
+    if first_time_gen:
+        first_time_gen=False
+        comfy_process = await start_comfyui()
 
     try:
         print("🔄 Loading workflow...")
@@ -1231,9 +1237,35 @@ async def generate_video_cmd(prompt, cond_image, cond_audio_path, output_path, j
             print("❌ Cannot findout video")
             return None
     finally:
-        # await stop_comfyui(comfy_process)
+        if check_ram_status():
+            print("🚨 KÍCH HOẠT RESTART: Giải phóng RAM.")
+            await stop_comfyui(comfy_process)     
+            comfy_process = await start_comfyui() 
+            print("✅ ComfyUI đã được khởi động lại thành công.")
         print("✅ Finished generate_video_cmd")
 
+        # await stop_comfyui(comfy_process)
+        # comfy_process = await start_comfyui()
+
+# --- HÀM KIỂM TRA RAM ---
+def check_ram_status():
+    RAM_LIMIT_GB = 50 
+    AVAILABLE_RAM_THRESHOLD_PERCENT = 10
+    mem = psutil.virtual_memory()
+    used_ram_gb = mem.used / (1024**3) 
+    available_ram_percent = mem.available / mem.total * 100 
+    print(f"📊 RAM Usage: {used_ram_gb:.2f} GB (Used) | {mem.percent}% (Used Percent)")
+    print(f"   RAM Available: {available_ram_percent:.2f}%")
+    
+    if used_ram_gb > RAM_LIMIT_GB:
+        print(f"⚠️ CẢNH BÁO: RAM Used ({used_ram_gb:.2f} GB) vượt quá giới hạn {RAM_LIMIT_GB} GB.")
+        return True 
+    
+    if available_ram_percent < AVAILABLE_RAM_THRESHOLD_PERCENT:
+        print(f"⚠️ CẢNH BÁO: RAM Available ({available_ram_percent:.2f}%) quá thấp (dưới {AVAILABLE_RAM_THRESHOLD_PERCENT}%).")
+        return True 
+    print("✅ RAM status is normal.")  
+    return False 
 async def move_file_async(src_path, dst_path):
     def move_file():
         os.rename(src_path, dst_path)
@@ -1762,7 +1794,7 @@ async def start_comfyui1():
         stderr=asyncio.subprocess.PIPE
     )
     print(f"🚀 ComfyUI started (PID: {process.pid})")
-    ready = await wait_for_port_async(HOST, PORT, timeout=120)
+    ready = await wait_for_port_async(HOST, PORT, timeout=240)
 
     if not ready:
         print("⚠️ ComfyUI không khởi động được đúng cách (port không mở).")
