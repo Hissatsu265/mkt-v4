@@ -38,6 +38,7 @@ video_paths_product_rout360=[]
 event="Christmas"
 full_text_ofauido=""
 first_time_gen=True
+comfy_process = None
 import cv2
 import numpy as np
 
@@ -866,6 +867,8 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
         if event=="Christmas" and prompts[0].strip()=="":
             prompts[0]="A festive cartoon-style video of a character in a holiday environment. The background has subtle ambient motion, soft light shifts, and gentle environmental details to make the scene lively and realistic. The character is standing straight, calm, and natural, without any exaggerated movements or expressions"
             # print("use base promtp")
+        elif event=="Christmas" and len(prompts[0].strip()) < 10:
+            prompts[0]="A festive cartoon-style video of a character in a holiday environment. The background has subtle ambient motion, soft light shifts, and gentle environmental details to make the scene lively and realistic. The character is standing straight, calm, and natural, without any exaggerated movements or expressions"
         elif prompts[0].strip()=="":
 
             prompts[0]="A realistic video of a person confidently giving a lecture. Their face remains neutral and professional, without expressions or head movement. Their hands moves up and down slowly and naturally to emphasize his words without swinging his arms from side to side, creating the impression of a teacher explaining a lesson."
@@ -1124,7 +1127,7 @@ async def find_latest_video(prefix, output_dir=str(BASE_DIR / "ComfyUI/output"))
 
 # ========== Hàm chính được cập nhật ==========
 async def generate_video_cmd(prompt, cond_image, cond_audio_path, output_path, job_id,resolution,negative_prompt=""):
-    global first_time_gen
+    global first_time_gen,comfy_process 
     if first_time_gen:
         first_time_gen=False
         comfy_process = await start_comfyui()
