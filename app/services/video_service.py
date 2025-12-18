@@ -850,6 +850,11 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
     # =========================================================================================    
 
     else:
+        watermark_english=True
+        fffffffff=prompts[0].strip()
+        if fffffffff.lower()=="german":
+            watermark_english=False 
+        
         # ===========================================================
         path_intovid_base_resolution="916"
         if resolution=="16:9":
@@ -868,6 +873,7 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
             prompts[0]="A festive cartoon-style video of a character in a holiday environment. The background has subtle ambient motion, soft light shifts, and gentle environmental details to make the scene lively and realistic. The character is standing straight, calm, and natural, without any exaggerated movements or expressions"
             # print("use base promtp")
         elif event=="Christmas" and len(prompts[0].strip()) < 10:
+            print("using our prompt <><<>><<<<>>>>")
             prompts[0]="A festive cartoon-style video of a character in a holiday environment. The background has subtle ambient motion, soft light shifts, and gentle environmental details to make the scene lively and realistic. The character is standing straight, calm, and natural, without any exaggerated movements or expressions"
         elif prompts[0].strip()=="":
 
@@ -882,7 +888,7 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
         # print(background)
         # print(character)
         # import time
-        time.sleep(15)
+        # time.sleep(15)
         # =================================================================
       
         audiohavesecondatstart = add_silence_to_start(cond_audio_path, job_id, duration_ms=500)
@@ -915,7 +921,8 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
             await asyncio.to_thread(
                 merge_videos,
                 str(video_intro),
-                str(output_path_video)
+                str(output_path_video),
+                watermark_english
             )
         else:
             print("No video intro available")
@@ -1243,8 +1250,9 @@ async def generate_video_cmd(prompt, cond_image, cond_audio_path, output_path, j
         if check_ram_status():
             print("🚨 KÍCH HOẠT RESTART: Giải phóng RAM.")
             await stop_comfyui(comfy_process)     
-            comfy_process = await start_comfyui() 
-            print("✅ ComfyUI đã được khởi động lại thành công.")
+            first_time_gen=True
+            # comfy_process = await start_comfyui() 
+            # print("✅ ComfyUI đã được khởi động lại thành công.")
         print("✅ Finished generate_video_cmd")
 
         # await stop_comfyui(comfy_process)
@@ -1252,8 +1260,8 @@ async def generate_video_cmd(prompt, cond_image, cond_audio_path, output_path, j
 
 # --- HÀM KIỂM TRA RAM ---
 def check_ram_status():
-    RAM_LIMIT_GB = 50 
-    AVAILABLE_RAM_THRESHOLD_PERCENT = 10
+    RAM_LIMIT_GB = 70 
+    AVAILABLE_RAM_THRESHOLD_PERCENT = 15
     mem = psutil.virtual_memory()
     used_ram_gb = mem.used / (1024**3) 
     available_ram_percent = mem.available / mem.total * 100 
