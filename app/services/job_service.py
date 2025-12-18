@@ -1219,84 +1219,112 @@ class JobService:
             for item in reversed(temp_queue):
                 await self.job_queue.put(item)
             return 0
-    async def update_job_status(self, job_id: str, status: JobStatus, **kwargs):
-        """Update job status với retry logic"""
-        update_data = {"status": status}
-        update_data.update(kwargs)
+    # async def update_job_status(self, job_id: str, status: JobStatus, **kwargs):
+    #     """Update job status với retry logic"""
+    #     update_data = {"status": status}
+    #     update_data.update(kwargs)
 
-        if status in [JobStatus.COMPLETED, JobStatus.FAILED]:
-            update_data["completed_at"] = datetime.now().isoformat()
+    #     if status in [JobStatus.COMPLETED, JobStatus.FAILED]:
+    #         update_data["completed_at"] = datetime.now().isoformat()
 
-        async def _update_job():
-            return await job_repository.update_job(job_id, update_data)
+    #     async def _update_job():
+    #         return await job_repository.update_job(job_id, update_data)
 
-        try:
-            result = await self._execute_with_retry(
-                operation=_update_job,
-                operation_name=f"update_job_status[{job_id}]",
-                max_retries=5,  # Nhiều retry hơn cho update vì quan trọng
-                retry_delay=2.0
-            )
+    #     try:
+    #         result = await self._execute_with_retry(
+    #             operation=_update_job,
+    #             operation_name=f"update_job_status[{job_id}]",
+    #             max_retries=5,  # Nhiều retry hơn cho update vì quan trọng
+    #             retry_delay=2.0
+    #         )
             
-            print(f"[update_job_status] job_id={job_id} status={status} update_result={result}")
+    #         print(f"[update_job_status] job_id={job_id} status={status} update_result={result}")
             
-            if not result:
-                print(f"[update_job_status] Warning: update_job returned falsy result for job {job_id}")
+    #         if not result:
+    #             print(f"[update_job_status] Warning: update_job returned falsy result for job {job_id}")
                 
-        except Exception as e:
-            print(f"[update_job_status] Failed to update job {job_id} after all retries: {e}")
+    #     except Exception as e:
+    #         print(f"[update_job_status] Failed to update job {job_id} after all retries: {e}")
             
-            # Thử mark as FAILED nếu update gốc thất bại
-            if status != JobStatus.FAILED:
-                try:
-                    async def _mark_failed():
-                        return await job_repository.update_job(
-                            job_id, 
-                            {
-                                "status": JobStatus.FAILED, 
-                                "error_message": f"Update error: {e}", 
-                                "completed_at": datetime.now().isoformat()
-                            }
-                        )
+    #         # Thử mark as FAILED nếu update gốc thất bại
+    #         if status != JobStatus.FAILED:
+    #             try:
+    #                 async def _mark_failed():
+    #                     return await job_repository.update_job(
+    #                         job_id, 
+    #                         {
+    #                             "status": JobStatus.FAILED, 
+    #                             "error_message": f"Update error: {e}", 
+    #                             "completed_at": datetime.now().isoformat()
+    #                         }
+    #                     )
                     
-                    await self._execute_with_retry(
-                        operation=_mark_failed,
-                        operation_name=f"mark_job_failed[{job_id}]",
-                        max_retries=3,
-                        retry_delay=2.0
-                    )
-                except Exception as e2:
-                    print(f"[update_job_status] Failed to mark job as FAILED: {e2}")
+    #                 await self._execute_with_retry(
+    #                     operation=_mark_failed,
+    #                     operation_name=f"mark_job_failed[{job_id}]",
+    #                     max_retries=3,
+    #                     retry_delay=2.0
+    #                 )
+    #             except Exception as e2:
+    #                 print(f"[update_job_status] Failed to mark job as FAILED: {e2}")
+    # async def update_job_status(self, job_id: str, status: JobStatus, **kwargs):
+    #     update_data = {"status": status}
+    #     update_data.update(kwargs)
+
+    #     if status in [JobStatus.COMPLETED, JobStatus.FAILED]:
+    #         update_data["completed_at"] = datetime.now().isoformat()
+
+    #     try:
+    #         result = await job_repository.update_job(job_id, update_data)
+    #         # Ghi log kết quả update trả về từ repository để debug
+    #         print(f"[update_job_status] job_id={job_id} status={status} update_result={result}")
+    #         if not result:
+    #             print(f"[update_job_status] Warning: update_job returned falsy result for job {job_id}")
+    #     except Exception as e:
+    #         print(f"[update_job_status] Exception when updating job {job_id}: {e}")
+    #         # Không raise tiếp để worker vẫn tiếp tục; nhưng lưu lỗi vào Mongo để kiểm tra thủ công
+    #         try:
+    #             await job_repository.update_job(job_id, {"status": JobStatus.FAILED, "error_message": f"Update error: {e}", "completed_at": datetime.now().isoformat()})
+    #         except Exception as e2:
+    #             print(f"[update_job_status] Failed to mark job as FAILED after update exception: {e2}")
     async def update_job_status(self, job_id: str, status: JobStatus, **kwargs):
         update_data = {"status": status}
         update_data.update(kwargs)
 
+        if status == JobStatus.PROCESSING:
+            progress = kwargs.get("progress", 50)
+            if progress <= 10:
+                update_data["started_at"] = datetime.now().isoformat()
+                print(f"[{datetime.now().isoformat()}] Set started_at for job {job_id}")
+
+            
+
+        # Tính tổng thời gian khi job hoàn thành hoặc thất bại
         if status in [JobStatus.COMPLETED, JobStatus.FAILED]:
             update_data["completed_at"] = datetime.now().isoformat()
+            
+            # Lấy thông tin job để tính thời gian
+            try:
+                job_data = await job_repository.find_job_by_id(job_id)
+                if job_data and job_data.get("started_at"):
+                    started_at = datetime.fromisoformat(job_data["started_at"])
+                    completed_at = datetime.now()
+                    total_time = int((completed_at - started_at).total_seconds())
+                    update_data["total_generation_time"] = total_time
+            except Exception as e:
+                print(f"[update_job_status] Error calculating total_generation_time: {e}")
 
         try:
             result = await job_repository.update_job(job_id, update_data)
-            # Ghi log kết quả update trả về từ repository để debug
             print(f"[update_job_status] job_id={job_id} status={status} update_result={result}")
             if not result:
                 print(f"[update_job_status] Warning: update_job returned falsy result for job {job_id}")
         except Exception as e:
             print(f"[update_job_status] Exception when updating job {job_id}: {e}")
-            # Không raise tiếp để worker vẫn tiếp tục; nhưng lưu lỗi vào Mongo để kiểm tra thủ công
             try:
                 await job_repository.update_job(job_id, {"status": JobStatus.FAILED, "error_message": f"Update error: {e}", "completed_at": datetime.now().isoformat()})
             except Exception as e2:
                 print(f"[update_job_status] Failed to mark job as FAILED after update exception: {e2}")
-    # async def update_job_status(self, job_id: str, status: JobStatus, **kwargs):
-        
-    #     update_data = {"status": status}
-    #     update_data.update(kwargs)
-        
-    #     if status in [JobStatus.COMPLETED, JobStatus.FAILED]:
-    #         update_data["completed_at"] = datetime.now().isoformat()
-        
-    #     await job_repository.update_job(job_id, update_data)
-
     async def _update_job_in_redis(self, job_id: str):
         """Helper method để update job in Redis không block"""
         print("Sử dụng redis trong file JobService")
@@ -1314,22 +1342,20 @@ class JobService:
         
         while True:
             try:
-                # Lấy job từ queue
                 job_data = await self.job_queue.get()
                 job_id = job_data["job_id"]
-                # ==========================================
+                
                 print("download image=======================")
                 images_pathdown, audio_path_down = await download_assets(job_data)
-                # ========================================
+                
                 print(f"Processing job: {job_id}")
                 
                 async with self.video_processing_lock:
                     self.current_processing_job = job_id
                     
-                    # Cập nhật status thành processing
+                    # Cập nhật status thành processing (started_at sẽ được lưu tự động)
                     await self.update_job_status(job_id, JobStatus.PROCESSING, progress=10)
                     
-                    # Import video service
                     from app.services.video_service import VideoService
                     video_service = VideoService()
                     
@@ -1344,29 +1370,9 @@ class JobService:
                             character=job_data.get("character",""),
                             background=job_data.get("background","")
                         )
-                        # print("fsfssfsdfsfs: ", list_scene)
-                        # ======================================
-                        # max_retries = 5
-                        # retry_delay = 5  # giây
-                        # attempt = 0
-                        # while attempt < max_retries:
-                        #     try:
-                        #         await self.update_job_status(
-                        #             job_id, 
-                        #             JobStatus.COMPLETED, 
-                        #             progress=100,
-                        #             video_path=video_path,
-                        #             list_scene=list_scene
-                        #         )
-                        #         break  
-                        #     except Exception as e:
-                        #         attempt += 1
-                        #         if attempt >= max_retries:
-                        #             print(f"Failed to update job status after {max_retries} attempts: {e}")
-                        #             break
-                        #         print(f"Attempt {attempt} failed: {e}. Retrying in {retry_delay}s...")
-                        #         await asyncio.sleep(retry_delay)
+                        
                         try:
+                            # total_generation_time sẽ được tính tự động
                             await self.update_job_status(
                                 job_id, 
                                 JobStatus.COMPLETED, 
@@ -1378,18 +1384,10 @@ class JobService:
                             
                         except Exception as e:
                             print(f"Failed to mark job as completed: {e}")
-                        # await self.update_job_status(
-                        #     job_id, 
-                        #     JobStatus.COMPLETED, 
-                        #     progress=100,
-                        #     video_path=video_path,
-                        #     list_scene=list_scene
-                        # )
-                        #================================================ 
-                        print(f"Job completed: {job_id}")
-                        
+                            
                     except Exception as e:
                         print(f"Job failed: {job_id}, Error: {e}")
+                        # total_generation_time cũng được tính cho job failed
                         await self.update_job_status(
                             job_id,
                             JobStatus.FAILED,

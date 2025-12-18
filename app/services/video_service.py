@@ -448,6 +448,7 @@ class VideoService:
             print("Uploading video to Directus...")
 
             path_directus= Uploadfile_directus(str(output_path))
+            print("dfsf")
             if path_directus is not None and output_path.exists() :
                 print(f"Video upload successfully: {path_directus}")
                 print(f"Job ID: {job_id}, Output Path: {path_directus}")
@@ -895,12 +896,12 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
         generate_output_filename=os.path.join(os.getcwd(), f"{job_id}_noaudio.mp4")
         if wait_for_audio_ready(audiohavesecondatstart, min_size_mb=0.02, max_wait_time=60, min_duration=2.0):
             print("Detailed check passed!")
-
+        print("============sgageeeee===============")
         # =================================================================
         file_path = str(cond_images[0])
         file_root, file_ext = os.path.splitext(file_path)
         await job_service.update_job_status(job_id, "processing", progress=50)
-        
+        print("Generating video with prompt:", prompts[0])
         output=await generate_video_cmd(
             prompt=prompts[0], 
             cond_image=file_path, 
@@ -910,7 +911,7 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
             resolution=resolution
         )  
         await job_service.update_job_status(job_id, "processing", progress=97)
-
+        # =========================replace audio===================================
         from utilities.merge_video_audio import replace_audio_trimmed
         tempt=trim_video_start(generate_output_filename, duration=0.5)
         output_file = replace_audio_trimmed(generate_output_filename,cond_audio_path,output_path_video)

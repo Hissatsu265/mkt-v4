@@ -54,7 +54,9 @@ class JobStatusResponse(BaseModel):
     video_path: Optional[str] = None
     error_message: Optional[str] = None
     created_at: str
+    started_at: Optional[str] = None  # Thời điểm bắt đầu thực thi
     completed_at: Optional[str] = None
+    total_generation_time: Optional[int] = None  # Tổng thời gian tạo video (giây)
     list_scene: Optional[List[float]] = None 
     queue_position: Optional[int] = None
     estimated_wait_time: Optional[int] = None
