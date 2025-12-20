@@ -32,7 +32,11 @@ class LogInterceptor(io.TextIOWrapper):
         super().write(data)
 
     def flush(self):
-        super().flush()
+        try:
+            super().flush()
+        except BrokenPipeError:
+            # Ignore broken pipe errors in subprocess environments
+            pass
         for cb in self._flush_callbacks:
             cb(self._logs_since_flush)
             self._logs_since_flush = []
