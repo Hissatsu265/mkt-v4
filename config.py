@@ -30,6 +30,13 @@ CLEANUP_INTERVAL_MINUTES = int(os.getenv("CLEANUP_INTERVAL_MINUTES", 180))  # Cl
 
 # RunPod serverless mode
 RUNPOD_MODE = os.getenv("RUNPOD_MODE", "false")  # Enable serverless mode when "true"
+
+# Performance Configuration
+MAX_PARALLEL_WORKERS = int(os.getenv("MAX_PARALLEL_WORKERS", 3))  # Max parallel video jobs (auto-calculated based on GPU)
+GPU_MEMORY_PER_JOB_GB = int(os.getenv("GPU_MEMORY_PER_JOB_GB", 15))  # GPU memory reserved per job
+GPU_MEMORY_RESERVE_GB = int(os.getenv("GPU_MEMORY_RESERVE_GB", 5))  # Safety buffer for system
+ENABLE_PARALLEL_PROCESSING = os.getenv("ENABLE_PARALLEL_PROCESSING", "true").lower() == "true"  # Enable/disable parallel processing
+
 # =======================================
 SERVER_COMFYUI="127.0.0.1:8188"
 WORKFLOW_INFINITETALK_PATH="/workflow/InfiniteTalk_api_ver2.json"

@@ -73,6 +73,13 @@ class JobService:
         self.effect_workers_busy: List[bool] = []
         self.max_effect_workers = self._calculate_effect_workers()
         self._init_effect_workers()
+
+        # NEW: Multi-worker system for video jobs
+        self.video_workers: List[asyncio.Task] = []
+        self.video_processing_locks: List[asyncio.Lock] = []
+        self.video_workers_busy: List[bool] = []
+        self.max_video_workers = self._calculate_video_workers()
+        self._init_video_workers()
     # =============================================================
     async def _reconnect_mongodb_if_needed(self, max_retries: int = 3, retry_delay: float = 2.0):
         """Thử reconnect MongoDB nếu connection bị mất"""
@@ -148,6 +155,45 @@ class JobService:
         """Khởi tạo effect workers và locks"""
         self.effect_processing_locks = [asyncio.Lock() for _ in range(self.max_effect_workers)]
         self.effect_workers_busy = [False for _ in range(self.max_effect_workers)]
+
+    def _calculate_video_workers(self) -> int:
+        """Calculate number of parallel video workers based on GPU memory"""
+        from config import MAX_PARALLEL_WORKERS, ENABLE_PARALLEL_PROCESSING, GPU_MEMORY_PER_JOB_GB, GPU_MEMORY_RESERVE_GB
+
+        if not ENABLE_PARALLEL_PROCESSING:
+            print("Parallel processing disabled, using 1 worker")
+            return 1  # Fallback to serial processing
+
+        # Auto-detect GPU memory
+        try:
+            import torch
+            if torch.cuda.is_available():
+                gpu_total_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+                available_for_jobs = gpu_total_gb - GPU_MEMORY_RESERVE_GB
+
+                # Calculate workers based on GPU capacity
+                auto_workers = max(1, int(available_for_jobs / GPU_MEMORY_PER_JOB_GB))
+
+                # Respect max limit from config
+                workers = min(auto_workers, MAX_PARALLEL_WORKERS)
+
+                print(f"🚀 GPU Auto-Detection: {gpu_total_gb:.1f}GB total, {available_for_jobs:.1f}GB available for jobs")
+                print(f"📊 Calculated workers: {auto_workers} (using {workers} after config limit of {MAX_PARALLEL_WORKERS})")
+                print(f"🎯 Parallel video processing enabled with {workers} worker(s)")
+
+                return workers
+            else:
+                print("⚠️  No GPU detected, using 1 worker")
+                return 1
+        except Exception as e:
+            print(f"❌ GPU detection failed: {e}, using config value of {MAX_PARALLEL_WORKERS}")
+            return max(1, MAX_PARALLEL_WORKERS)
+
+    def _init_video_workers(self):
+        """Initialize video workers and locks"""
+        self.video_processing_locks = [asyncio.Lock() for _ in range(self.max_video_workers)]
+        self.video_workers_busy = [False for _ in range(self.max_video_workers)]
+
     async def init_redis(self):
         """Initialize Redis connection"""
         try:
@@ -311,11 +357,9 @@ class JobService:
         async with self.queue_lock:
             self.waiting_job_ids.append(job_id)
             await self.job_queue.put(job_data.copy())
-        # Thêm vào queue
-        await self.job_queue.put(job_data.copy())
-        
-        # Start worker và cleanup
-        await self.start_worker()
+
+        # Start workers và cleanup
+        await self.start_video_workers()
         asyncio.create_task(self.start_cleanup_task())
         
         return job_id
@@ -331,11 +375,19 @@ class JobService:
         except Exception as e:
             print(f"Error saving job to Redis: {e}")
 
-    async def start_worker(self):
-        """Bắt đầu worker nếu chưa chạy"""
-        if not self.worker_task or self.worker_task.done():
-            self.worker_task = asyncio.create_task(self.process_jobs())
-            self.processing = True
+    async def start_video_workers(self):
+        """Start video workers if not running"""
+        # Clean up completed workers
+        self.video_workers = [w for w in self.video_workers if not w.done()]
+
+        # Start workers if needed
+        workers_needed = self.max_video_workers - len(self.video_workers)
+
+        for i in range(workers_needed):
+            worker_id = len(self.video_workers)
+            worker_task = asyncio.create_task(self.process_video_jobs(worker_id))
+            self.video_workers.append(worker_task)
+            print(f"✅ Started video worker {worker_id}/{self.max_video_workers}")
 
     # async def get_job_status(self, job_id: str) -> Dict[str, Any]:
     #     """Lấy job status từ MongoDB"""
@@ -540,35 +592,37 @@ class JobService:
     #         except Exception as e:
     #             print(f"Error in job worker: {e}")
     #             await asyncio.sleep(1)
-    async def process_jobs(self):
-        print("Job worker started")
-        
+    async def process_video_jobs(self, worker_id: int):
+        """Video job worker - processes jobs in parallel"""
+        print(f"🎬 Video worker {worker_id} started")
+
         while True:
             try:
                 job_data = await self.job_queue.get()
                 job_id = job_data["job_id"]
-                
+
                 current_job_db = await job_repository.find_job_by_id(job_id)
                 if current_job_db and current_job_db.get("status") == JobStatus.FAILED:
                     # ✅ THÊM: Kiểm tra nếu đã retry rồi thì skip
                     if current_job_db.get("retry_count", 0) >= 1:
-                        print(f"Skipping failed job (already retried): {job_id}")
+                        print(f"[Worker {worker_id}] Skipping failed job (already retried): {job_id}")
                         self.job_queue.task_done()
                         continue
-                
+
                 # Xóa khỏi tracking list
                 async with self.queue_lock:
                     if job_id in self.waiting_job_ids:
                         self.waiting_job_ids.remove(job_id)
-                
-                print(f"Processing job: {job_id}")
-                print(f"Remaining in queue: {self.waiting_job_ids}")
-                
-                print("download image=======================")
+
+                print(f"[Worker {worker_id}] 🎯 Processing job: {job_id}")
+                print(f"[Worker {worker_id}] Remaining in queue: {self.waiting_job_ids}")
+
+                print(f"[Worker {worker_id}] Downloading assets...")
                 images_pathdown, audio_path_down = await download_assets(job_data)
-                
-                async with self.video_processing_lock:
-                    self.current_processing_job = job_id
+
+                # Acquire ONLY this worker's lock (allows other workers to continue)
+                async with self.video_processing_locks[worker_id]:
+                    self.video_workers_busy[worker_id] = True
                     
                     await self.update_job_status(job_id, JobStatus.PROCESSING, progress=10)
                     
@@ -576,7 +630,7 @@ class JobService:
                     video_service = VideoService()
                     
                     try:
-                        print(f"Creating video for job: {job_id}")
+                        print(f"[Worker {worker_id}] 🎥 Creating video for job: {job_id}")
                         video_path, list_scene = await video_service.create_video(
                             image_paths=images_pathdown,
                             prompts=job_data["prompts"],
@@ -586,73 +640,98 @@ class JobService:
                             character=job_data.get("character", ""),
                             background=job_data.get("background", "")
                         )
-                        
+
                         await self.update_job_status(
-                            job_id, 
-                            JobStatus.COMPLETED, 
+                            job_id,
+                            JobStatus.COMPLETED,
                             progress=100,
                             video_path=video_path,
                             list_scene=list_scene
                         )
-                        print(f"Job completed: {job_id}")
+                        print(f"[Worker {worker_id}] ✅ Job completed: {job_id}")
                         
                     except Exception as e:
-                        print(f"Job failed: {job_id}, Error: {e}")
-                        
+                        print(f"[Worker {worker_id}] ❌ Job failed: {job_id}, Error: {e}")
+
                         # ✅ THÊM: Logic retry
-                        current_retry_count = job_data.get("retry_count", 1)
-                        
+                        current_retry_count = job_data.get("retry_count", 0)
+
                         if current_retry_count < 1:  # Chỉ retry 1 lần
-                            print(f"Retrying job {job_id} (attempt {current_retry_count + 1}/1)")
-                            
+                            print(f"[Worker {worker_id}] 🔄 Retrying job {job_id} (attempt {current_retry_count + 1}/1)")
+
                             # Tăng retry_count
                             job_data["retry_count"] = current_retry_count + 1
                             job_data["status"] = JobStatus.PENDING
                             job_data["error_message"] = None
-                            
+
                             # Cập nhật trong DB
                             await job_repository.update_job(job_id, {
                                 "retry_count": current_retry_count + 1,
                                 "status": JobStatus.PENDING,
                                 "error_message": f"Retrying after error: {str(e)}"
                             })
-                            
+
                             # ✅ Đưa job xuống cuối queue
                             async with self.queue_lock:
                                 self.waiting_job_ids.append(job_id)
                             await self.job_queue.put(job_data)
-                            
-                            print(f"Job {job_id} added back to queue at position {len(self.waiting_job_ids)}")
+
+                            print(f"[Worker {worker_id}] Job {job_id} added back to queue at position {len(self.waiting_job_ids)}")
                         else:
                             # Đã retry rồi, mark as FAILED vĩnh viễn
-                            print(f"Job {job_id} failed after retry, marking as FAILED")
+                            print(f"[Worker {worker_id}] 💀 Job {job_id} failed permanently after retry")
                             await self.update_job_status(
                                 job_id,
                                 JobStatus.FAILED,
                                 error_message=f"Failed after 1 retry: {str(e)}"
                             )
-                    
+
                     finally:
-                        self.current_processing_job = None
-                
+                        self.video_workers_busy[worker_id] = False
+
                 self.job_queue.task_done()
-                
+
             except Exception as e:
-                print(f"Error in job worker: {e}")
+                print(f"[Worker {worker_id}] ⚠️  Error in worker: {e}")
                 await asyncio.sleep(1)
+
+    async def get_video_workers_info(self):
+        """Get information about video workers"""
+        available_workers = sum(1 for busy in self.video_workers_busy if not busy)
+        busy_workers = sum(1 for busy in self.video_workers_busy if busy)
+
+        return {
+            "total_workers": self.max_video_workers,
+            "available_workers": available_workers,
+            "busy_workers": busy_workers,
+            "pending_jobs": self.job_queue.qsize(),
+            "workers_status": [
+                {
+                    "worker_id": i,
+                    "is_busy": self.video_workers_busy[i],
+                    "is_running": i < len(self.video_workers) and not self.video_workers[i].done()
+                }
+                for i in range(self.max_video_workers)
+            ]
+        }
 
     async def get_queue_info(self):
         """✅ Thêm thông tin về waiting jobs"""
         async with self.queue_lock:
             waiting_count = len(self.waiting_job_ids)
             waiting_ids = self.waiting_job_ids.copy()
-        
+
+        # Add worker info
+        video_workers_info = await self.get_video_workers_info()
+
         return {
-            "pending_jobs": waiting_count,
+            "jobs_in_queue": self.job_queue.qsize(),
+            "waiting_jobs": waiting_count,
             "waiting_job_ids": waiting_ids,
-            "current_processing": self.current_processing_job,
-            "is_processing": self.video_processing_lock.locked(),
-            "worker_running": self.processing
+            "worker_running": len(self.video_workers) > 0,
+            "video_workers": video_workers_info,
+            "max_workers": self.max_video_workers,
+            "pending_jobs": self.job_queue.qsize()  # Add for backward compatibility
         }
 
     # async def cancel_job(self, job_id: str) -> bool:
@@ -995,15 +1074,15 @@ class JobService:
         
         # Workers info
         effect_workers_info = await self.get_effect_workers_info()
-        
+        video_workers_info = await self.get_video_workers_info()
+
         return {
             "video_creation_jobs": {
                 "memory": memory_jobs,
                 "redis": redis_jobs,
                 "status_breakdown": status_count,
                 "queue_pending": self.job_queue.qsize(),
-                "current_processing": self.current_processing_job,
-                "is_processing": self.video_processing_lock.locked()
+                "workers": video_workers_info
             },
             "effect_jobs": {
                 "memory": effect_memory_jobs,
@@ -1018,6 +1097,7 @@ class JobService:
             },
             "system": {
                 "cpu_cores": psutil.cpu_count(logical=False),
+                "max_video_workers": self.max_video_workers,
                 "max_effect_workers": self.max_effect_workers
             }
         }
