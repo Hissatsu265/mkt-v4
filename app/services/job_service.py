@@ -62,6 +62,8 @@ class JobService:
 
         self.waiting_job_ids: List[str] = []
         self.queue_lock = asyncio.Lock()
+        
+        self.recovery_completed = False 
 
         self.job_queue = asyncio.Queue()
         self.effect_job_queue = asyncio.Queue()
@@ -141,6 +143,8 @@ class JobService:
         try:
             await mongodb.connect()
             print("MongoDB initialized successfully")
+            # ✅ THÊM: Recovery jobs sau khi connect MongoDB
+            await self.recover_pending_jobs()
         except Exception as e:
             print(f"MongoDB initialization failed: {e}")
             raise
@@ -162,37 +166,61 @@ class JobService:
 
         if not ENABLE_PARALLEL_PROCESSING:
             print("Parallel processing disabled, using 1 worker")
+            self.gpu_count = 0
             return 1  # Fallback to serial processing
 
-        # Auto-detect GPU memory
+        # Auto-detect GPU memory across all GPUs
         try:
             import torch
             if torch.cuda.is_available():
-                gpu_total_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-                available_for_jobs = gpu_total_gb - GPU_MEMORY_RESERVE_GB
+                # Detect all GPUs
+                gpu_count = torch.cuda.device_count()
+                total_gpu_memory = 0
 
-                # Calculate workers based on GPU capacity
+                print(f"🔍 Detecting GPUs...")
+                for i in range(gpu_count):
+                    gpu_props = torch.cuda.get_device_properties(i)
+                    gpu_memory_gb = gpu_props.total_memory / (1024**3)
+                    gpu_name = gpu_props.name
+                    total_gpu_memory += gpu_memory_gb
+                    print(f"   GPU {i}: {gpu_name} ({gpu_memory_gb:.1f}GB)")
+
+                # Calculate workers based on TOTAL GPU memory
+                available_for_jobs = total_gpu_memory - GPU_MEMORY_RESERVE_GB
                 auto_workers = max(1, int(available_for_jobs / GPU_MEMORY_PER_JOB_GB))
 
                 # Respect max limit from config
                 workers = min(auto_workers, MAX_PARALLEL_WORKERS)
 
-                print(f"🚀 GPU Auto-Detection: {gpu_total_gb:.1f}GB total, {available_for_jobs:.1f}GB available for jobs")
+                # Store GPU count for worker assignment
+                self.gpu_count = gpu_count
+
+                print(f"🚀 Multi-GPU Detection: {gpu_count} GPU(s), {total_gpu_memory:.1f}GB total")
                 print(f"📊 Calculated workers: {auto_workers} (using {workers} after config limit of {MAX_PARALLEL_WORKERS})")
-                print(f"🎯 Parallel video processing enabled with {workers} worker(s)")
+                print(f"🎯 Parallel video processing enabled with {workers} worker(s) across {gpu_count} GPU(s)")
 
                 return workers
             else:
                 print("⚠️  No GPU detected, using 1 worker")
+                self.gpu_count = 0
                 return 1
         except Exception as e:
             print(f"❌ GPU detection failed: {e}, using config value of {MAX_PARALLEL_WORKERS}")
+            self.gpu_count = 0
             return max(1, MAX_PARALLEL_WORKERS)
 
     def _init_video_workers(self):
         """Initialize video workers and locks"""
         self.video_processing_locks = [asyncio.Lock() for _ in range(self.max_video_workers)]
         self.video_workers_busy = [False for _ in range(self.max_video_workers)]
+
+    def _get_gpu_for_worker(self, worker_id: int) -> int:
+        """Assign GPU device to worker using round-robin distribution"""
+        if not hasattr(self, 'gpu_count') or self.gpu_count <= 0:
+            return 0  # Fallback to GPU 0 if no GPU count or single GPU
+
+        # Round-robin: Worker 0→GPU 0, Worker 1→GPU 1, Worker 2→GPU 0, etc.
+        return worker_id % self.gpu_count
 
     async def init_redis(self):
         """Initialize Redis connection"""
@@ -221,7 +249,67 @@ class JobService:
                 print(f"Cleanup completed at {datetime.now()}")
             except Exception as e:
                 print(f"Cleanup error: {e}")
-
+    async def recover_pending_jobs(self):
+        """Khôi phục các job PENDING và PROCESSING từ MongoDB sau khi server restart"""
+        
+        if self.recovery_completed:
+            print("Job recovery already completed, skipping...")
+            return
+        
+        try:
+            print("🔄 Starting job recovery process...")
+            
+            # Lấy tất cả job PENDING và PROCESSING từ MongoDB
+            pending_jobs = await job_repository.find_jobs_by_status(JobStatus.PENDING)
+            processing_jobs = await job_repository.find_jobs_by_status(JobStatus.PROCESSING)
+            
+            all_jobs = pending_jobs + processing_jobs
+            
+            if not all_jobs:
+                print("✅ No jobs to recover")
+                self.recovery_completed = True
+                return
+            
+            # Sắp xếp theo thời gian tạo (job cũ nhất lên đầu)
+            all_jobs.sort(key=lambda x: x.get("created_at", ""))
+            
+            print(f"📋 Found {len(all_jobs)} jobs to recover:")
+            print(f"   - PENDING: {len(pending_jobs)}")
+            print(f"   - PROCESSING: {len(processing_jobs)}")
+            
+            recovered_count = 0
+            
+            async with self.queue_lock:
+                for job in all_jobs:
+                    job_id = job["job_id"]
+                    
+                    # Reset job về trạng thái PENDING nếu đang PROCESSING
+                    if job["status"] == JobStatus.PROCESSING:
+                        print(f"   🔄 Resetting PROCESSING job to PENDING: {job_id}")
+                        await job_repository.update_job(job_id, {
+                            "status": JobStatus.PENDING,
+                            "progress": 0,
+                            "error_message": "Job was interrupted by server restart"
+                        })
+                        job["status"] = JobStatus.PENDING
+                    
+                    # Thêm vào queue và tracking list
+                    self.waiting_job_ids.append(job_id)
+                    await self.job_queue.put(job.copy())
+                    recovered_count += 1
+                    
+                    print(f"   ✅ Recovered job: {job_id} (position: {len(self.waiting_job_ids)})")
+            
+            print(f"✅ Job recovery completed: {recovered_count} jobs recovered")
+            self.recovery_completed = True
+            
+            # Khởi động worker để xử lý các job đã recovery
+            await self.start_worker()
+            
+        except Exception as e:
+            print(f"❌ Error during job recovery: {e}")
+            # Không raise error để server vẫn khởi động được
+            self.recovery_completed = True 
     async def cleanup_old_jobs(self):
         """Xóa job cũ khỏi memory và Redis"""
         from config import JOB_RETENTION_HOURS
@@ -298,6 +386,15 @@ class JobService:
         return {"message": "Manual cleanup completed"}
 
     async def create_job(self, image_paths: list, prompts: list, audio_path: str, resolution: str = "1920x1080",background:str="",character:str="") -> str:
+
+        if not self.recovery_completed:
+            print("⏳ Waiting for job recovery to complete...")
+            # Đợi tối đa 10 giây
+            for _ in range(100):
+                if self.recovery_completed:
+                    break
+                await asyncio.sleep(0.1)
+
         job_id = str(uuid.uuid4())
         estimated_audio_duration = random.randint(25, 34)  # giây
     
@@ -313,11 +410,9 @@ class JobService:
         
         # ✅ THÊM: Tổng thời gian = jobs trước + job hiện tại
         total_wait_minutes = time_for_jobs_ahead + time_for_current_job
-        print(f"Estimated wait time for job {job_id}: {total_wait_minutes} minutes")
         # ✅ THÊM: Tính thời điểm hoàn thành
         estimate_time_complete = (datetime.now() + timedelta(minutes=total_wait_minutes)).isoformat()
-        print(f"Estimated completion time for job {job_id}: {estimate_time_complete}")
-        print("===================================")
+        
         job_data = {
             "job_id": job_id,
             "status": JobStatus.PENDING,
@@ -628,9 +723,12 @@ class JobService:
                     
                     from app.services.video_service import VideoService
                     video_service = VideoService()
-                    
+
                     try:
-                        print(f"[Worker {worker_id}] 🎥 Creating video for job: {job_id}")
+                        # Calculate GPU assignment for this worker
+                        gpu_id = self._get_gpu_for_worker(worker_id)
+                        print(f"[Worker {worker_id}] 🎥 Creating video for job: {job_id} on GPU {gpu_id}")
+
                         video_path, list_scene = await video_service.create_video(
                             image_paths=images_pathdown,
                             prompts=job_data["prompts"],
@@ -639,7 +737,8 @@ class JobService:
                             job_id=job_id,
                             character=job_data.get("character", ""),
                             background=job_data.get("background", ""),
-                            worker_id=worker_id  # NEW: Pass worker ID
+                            worker_id=worker_id,
+                            gpu_id=gpu_id  # NEW: Pass GPU assignment
                         )
 
                         await self.update_job_status(
@@ -706,11 +805,13 @@ class JobService:
             "available_workers": available_workers,
             "busy_workers": busy_workers,
             "pending_jobs": self.job_queue.qsize(),
+            "gpu_count": getattr(self, 'gpu_count', 1),  # Number of GPUs detected
             "workers_status": [
                 {
                     "worker_id": i,
                     "is_busy": self.video_workers_busy[i],
-                    "is_running": i < len(self.video_workers) and not self.video_workers[i].done()
+                    "is_running": i < len(self.video_workers) and not self.video_workers[i].done(),
+                    "assigned_gpu": self._get_gpu_for_worker(i)  # GPU assignment for this worker
                 }
                 for i in range(self.max_video_workers)
             ]

@@ -428,7 +428,7 @@ class VideoService:
         timestamp = int(asyncio.get_event_loop().time())
         return unique_id, f"video_{timestamp}_{unique_id}.mp4"
 
-    async def create_video(self, image_paths: List[str], prompts: List[str], audio_path: str, resolution: str, job_id: str,background:str,character:str, worker_id: int = 0) -> str:
+    async def create_video(self, image_paths: List[str], prompts: List[str], audio_path: str, resolution: str, job_id: str,background:str,character:str, worker_id: int = 0, gpu_id: int = 0) -> str:
         # print("Starting video creation...")
         # print(character)
         # print(background)
@@ -448,7 +448,7 @@ class VideoService:
         try:
             
             await job_service.update_job_status(job_id, "processing", progress=0)
-            list_scene = await run_job(jobid, prompts, image_paths, audio_path, output_path,resolution,character,background, worker_id)    
+            list_scene = await run_job(jobid, prompts, image_paths, audio_path, output_path,resolution,character,background, worker_id, gpu_id)    
             print("Uploading video to Directus...")
 
             path_directus= Uploadfile_directus(str(output_path))
@@ -468,7 +468,7 @@ class VideoService:
             if output_path.exists():
                 output_path.unlink()
             raise e
-async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_video,resolution,character,background, worker_id: int = 0):
+async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_video,resolution,character,background, worker_id: int = 0, gpu_id: int = 0):
     generate_output_filename = output_path_video
     list_scene=[]
     
@@ -621,7 +621,8 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
                         output_path=clip_name_test,
                         job_id=job_id,
                         resolution=resolution,
-                        worker_id=worker_id
+                        worker_id=worker_id,
+                        gpu_id=gpu_id
                     )
                     os.remove(result_text2image_path)
                     os.remove(silent_file)
@@ -707,7 +708,8 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
                     output_path=clip_name,
                     job_id=job_id,
                     resolution=resolution,
-                    worker_id=worker_id
+                    worker_id=worker_id,
+                    gpu_id=gpu_id
                 )
             elif (list_random[i] == 5):
                 clip_name111=os.path.join(os.getcwd(), f"{job_id}_zoomin_{i}.png")
@@ -719,7 +721,8 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
                     output_path=clip_name,
                     job_id=job_id,
                     resolution=resolution,
-                    worker_id=worker_id
+                    worker_id=worker_id,
+                    gpu_id=gpu_id
                 )
                 os.remove(clip_name111)
             elif (list_random[i] == 9):
@@ -910,13 +913,14 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
         await job_service.update_job_status(job_id, "processing", progress=50)
         print("Generating video with prompt:", prompts[0])
         output=await generate_video_cmd(
-            prompt=prompts[0], 
-            cond_image=file_path, 
-            cond_audio_path=audiohavesecondatstart, 
+            prompt=prompts[0],
+            cond_image=file_path,
+            cond_audio_path=audiohavesecondatstart,
             output_path=generate_output_filename,
             job_id=job_id,
             resolution=resolution,
-                    worker_id=worker_id
+            worker_id=worker_id,
+            gpu_id=gpu_id
         )  
         await job_service.update_job_status(job_id, "processing", progress=97)
         # =========================replace audio===================================
@@ -1009,20 +1013,25 @@ async def stop_comfyui(process):
             await process.wait()
 
 # ========== Multi-Worker ComfyUI Process Pool ==========
-async def start_comfyui_for_worker(worker_id: int) -> tuple:
-    """Start a dedicated ComfyUI instance for a specific worker"""
+async def start_comfyui_for_worker(worker_id: int, gpu_id: int = 0) -> tuple:
+    """Start a dedicated ComfyUI instance for a specific worker on a specific GPU"""
     from config import COMFYUI_BASE_PORT
 
     port = COMFYUI_BASE_PORT + worker_id
     host = "127.0.0.1"
 
-    print(f"[Worker {worker_id}] 🚀 Starting ComfyUI on port {port}...")
+    print(f"[Worker {worker_id}] 🚀 Starting ComfyUI on GPU {gpu_id}, port {port}...")
+
+    # Create environment with GPU assignment
+    env = os.environ.copy()
+    env['CUDA_VISIBLE_DEVICES'] = str(gpu_id)  # Isolate to specific GPU
 
     process = await asyncio.create_subprocess_exec(
         "python3", "main.py", "--port", str(port),
         cwd=str(BASE_DIR / "ComfyUI"),
         stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE
+        stderr=asyncio.subprocess.PIPE,
+        env=env  # Pass environment with GPU assignment
     )
 
     print(f"[Worker {worker_id}] ComfyUI started (PID: {process.pid}), waiting for port {port}...")
@@ -1060,7 +1069,7 @@ async def stop_comfyui_for_worker(worker_id: int):
     comfyui_processes.pop(worker_id, None)
     comfyui_ports.pop(worker_id, None)
 
-async def get_or_start_comfyui(worker_id: int) -> tuple:
+async def get_or_start_comfyui(worker_id: int, gpu_id: int = 0) -> tuple:
     """Get existing ComfyUI for worker or start a new one"""
     # Initialize lock if needed
     if worker_id not in comfyui_locks:
@@ -1072,11 +1081,11 @@ async def get_or_start_comfyui(worker_id: int) -> tuple:
             process = comfyui_processes[worker_id]
             if process.returncode is None:  # Still running
                 port = comfyui_ports[worker_id]
-                print(f"[Worker {worker_id}] Reusing existing ComfyUI on port {port}")
+                print(f"[Worker {worker_id}] Reusing existing ComfyUI on GPU {gpu_id}, port {port}")
                 return process, port
 
-        # Start new instance
-        process, port = await start_comfyui_for_worker(worker_id)
+        # Start new instance with GPU assignment
+        process, port = await start_comfyui_for_worker(worker_id, gpu_id)
         comfyui_processes[worker_id] = process
         comfyui_ports[worker_id] = port
 
@@ -1218,9 +1227,9 @@ async def find_latest_video(prefix, output_dir=str(BASE_DIR / "ComfyUI/output"))
     return await loop.run_in_executor(None, _find_files)
 
 # ========== Hàm chính được cập nhật ==========
-async def generate_video_cmd(prompt, cond_image, cond_audio_path, output_path, job_id,resolution, worker_id: int = 0, negative_prompt=""):
-    # Get or start ComfyUI for this worker
-    comfy_process, port = await get_or_start_comfyui(worker_id)
+async def generate_video_cmd(prompt, cond_image, cond_audio_path, output_path, job_id,resolution, worker_id: int = 0, gpu_id: int = 0, negative_prompt=""):
+    # Get or start ComfyUI for this worker with GPU assignment
+    comfy_process, port = await get_or_start_comfyui(worker_id, gpu_id)
     server_address_local = f"127.0.0.1:{port}"
 
     try:
@@ -1637,10 +1646,12 @@ Keep the product realistic and unchanged, with no distortion.",
         output=await generate_video_cmd(
                     prompt=video_paths_product_rout360[0],
                     cond_image=image_paths_product_rout360[0],
-                    cond_audio_path=str(BASE_DIR)+"/directus/english_girl_3s.wav", 
+                    cond_audio_path=str(BASE_DIR)+"/directus/english_girl_3s.wav",
                     output_path=filename,
                     job_id=jobid,
                     resolution=resolution,
+                    worker_id=worker_id,
+                    gpu_id=gpu_id,
                     negative_prompt="human, people, text, watermark, logo, extra object, overexposure, low-quality, distortion, blur, messy background, cartoon, unrealistic texture"
                 )
         os.remove(image_paths_product_rout360[0])
@@ -1669,10 +1680,12 @@ Keep the product realistic and unchanged, with no distortion.",
         output=await generate_video_cmd(
                     prompt=prompt_evesdf,
                     cond_image=image_path_sideface[0],
-                    cond_audio_path=cond_audio_path, 
+                    cond_audio_path=cond_audio_path,
                     output_path=output_path,
                     job_id=jobid,
                     resolution=resolution,
+                    worker_id=worker_id,
+                    gpu_id=gpu_id,
                     negative_prompt="change perspective, bright tones, overexposed, static, blurred details, subtitles, style, works, paintings, images, static, overall gray, worst quality, low quality, JPEG compression residue, ugly, incomplete, extra fingers, poorly drawn hands, poorly drawn faces, deformed, disfigured, misshapen limbs, fused fingers, still picture, messy background, three legs, many people in the background, walking backwards "+str(number)
                 )
         os.remove(image_path_sideface[0])

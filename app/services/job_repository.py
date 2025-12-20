@@ -1,27 +1,29 @@
 from datetime import datetime
 from typing import Dict, Any, List, Optional
-from app.models.mongodb import  mongodb
+from app.models.mongodb import mongodb
 from app.models.schemas import JobStatus
 import pymongo
 import copy
+
 class JobRepository:
     def __init__(self):
         self.mongodb = mongodb
+        self._collection = None  # ✅ THÊM DÒNG NÀY
+    
+    @property
+    def collection(self):
+        """Lazy load collection"""
+        if self._collection is None:
+            self._collection = mongodb.db["video_jobs_test_toan"]
+        return self._collection
     
     # ===== VIDEO CREATION JOBS =====
     
-    # async def insert_job(self, job_data: Dict[str, Any]) -> str:
-    #     """Thêm job mới vào MongoDB"""
-    #     try:
-    #         result = await self.mongodb.jobs_col.insert_one(job_data)
-    #         return job_data["job_id"]
-    #     except Exception as e:
-    #         raise Exception(f"Error inserting job: {e}")
     async def insert_job(self, job_data: Dict[str, Any]) -> str:
         try:
-            doc = copy.deepcopy(job_data)  # tránh mutation
+            doc = copy.deepcopy(job_data)
+            # ✅ SỬ DỤNG self.mongodb.jobs_col thay vì self.collection
             await self.mongodb.jobs_col.insert_one(doc)
-
             return job_data["job_id"]
         except Exception as e:
             raise Exception(f"Error inserting job: {e}")
@@ -47,11 +49,20 @@ class JobRepository:
             print(f"Error updating job {job_id}: {e}")
             return False
     
-    async def find_jobs_by_status(self, status: JobStatus) -> List[Dict[str, Any]]:
-        """Tìm jobs theo status"""
+    async def find_jobs_by_status(self, status: str) -> List[Dict[str, Any]]:
+        """Tìm tất cả jobs theo status - ✅ FIXED VERSION"""
         try:
+            # ✅ SỬ DỤNG self.mongodb.jobs_col thay vì self.collection
             cursor = self.mongodb.jobs_col.find({"status": status})
-            return await cursor.to_list(length=None)
+            jobs = await cursor.to_list(length=None)
+            
+            # Convert ObjectId to string
+            for job in jobs:
+                if "_id" in job:
+                    job["_id"] = str(job["_id"])
+            
+            return jobs
+            
         except Exception as e:
             print(f"Error finding jobs by status {status}: {e}")
             return []
@@ -70,15 +81,12 @@ class JobRepository:
                        offset: int = 0) -> Dict[str, Any]:
         """List jobs với pagination"""
         try:
-            # Build query
             query = {}
             if status_filter:
                 query["status"] = status_filter
             
-            # Get total count
             total = await self.mongodb.jobs_col.count_documents(query)
             
-            # Get jobs with pagination
             cursor = self.mongodb.jobs_col.find(query).sort("created_at", pymongo.DESCENDING).skip(offset).limit(limit)
             jobs = await cursor.to_list(length=limit)
             
@@ -162,12 +170,10 @@ class JobRepository:
     async def get_stats(self) -> Dict[str, Any]:
         """Lấy thống kê jobs từ MongoDB"""
         try:
-            # Video creation jobs stats
             video_stats = {}
             for status in JobStatus:
                 video_stats[status] = await self.count_jobs_by_status(status)
             
-            # Effect jobs stats  
             effect_stats = {}
             for status in JobStatus:
                 effect_stats[status] = await self.count_effect_jobs_by_status(status)
