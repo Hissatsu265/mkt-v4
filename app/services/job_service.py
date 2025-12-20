@@ -712,6 +712,7 @@ class JobService:
                 return 0
    
     async def update_job_status(self, job_id: str, status: JobStatus, **kwargs):
+        print(f"[UPDATE_JOB_STATUS] Called for job {job_id} with status={status}, kwargs={kwargs}")
         update_data = {"status": status}
         update_data.update(kwargs)
 
@@ -739,12 +740,13 @@ class JobService:
                 print(f"[update_job_status] Error calculating total_generation_time: {e}")
 
         try:
+            print(f"[UPDATE_JOB_STATUS] Calling job_repository.update_job with data: {update_data}")
             result = await job_repository.update_job(job_id, update_data)
-            print(f"[update_job_status] job_id={job_id} status={status} update_result={result}")
+            print(f"[UPDATE_JOB_STATUS] ✅ SUCCESS - job_id={job_id} status={status} update_result={result} modified_count={result}")
             if not result:
-                print(f"[update_job_status] Warning: update_job returned falsy result for job {job_id}")
+                print(f"[UPDATE_JOB_STATUS] ⚠️ WARNING: update_job returned False - job may not exist or no changes made for job {job_id}")
         except Exception as e:
-            print(f"[update_job_status] Exception when updating job {job_id}: {e}")
+            print(f"[UPDATE_JOB_STATUS] ❌ EXCEPTION when updating job {job_id}: {e}")
             try:
                 await job_repository.update_job(job_id, {"status": JobStatus.FAILED, "error_message": f"Update error: {e}", "completed_at": datetime.now().isoformat()})
             except Exception as e2:
