@@ -62,6 +62,8 @@ class JobStatusResponse(BaseModel):
     estimated_wait_time: Optional[int] = None
     is_processing: Optional[bool] = None
     current_processing_job: Optional[str] = None
+    estimate_waiting_time: Optional[int] = None  # Phút còn lại
+    estimate_time_complete: Optional[str] = None  # Thời điểm hoàn thành (ISO format)
 # ============================VIDEO EFFECT==========================================================
 # class TransitionEffect(str, Enum):
 #     FADE = "fade"

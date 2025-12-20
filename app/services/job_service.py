@@ -23,7 +23,7 @@ from typing import Dict, Any, List
 from app.models.mongodb import mongodb
 from app.services.job_repository import job_repository
 
-
+import random
 import re
 
 URL_REGEX = re.compile(
@@ -253,6 +253,25 @@ class JobService:
 
     async def create_job(self, image_paths: list, prompts: list, audio_path: str, resolution: str = "1920x1080",background:str="",character:str="") -> str:
         job_id = str(uuid.uuid4())
+        estimated_audio_duration = random.randint(25, 34)  # giây
+    
+        # ✅ THÊM: Tính số job đang chờ
+        async with self.queue_lock:
+            jobs_ahead = len(self.waiting_job_ids)+1
+        
+        # ✅ THÊM: Tính thời gian chờ (mỗi job trước đó random 20-27 phút)
+        time_for_jobs_ahead = sum(random.randint(20, 27) for _ in range(jobs_ahead))
+        
+        # ✅ THÊM: Thời gian tạo video (1 giây audio = 1 phút)
+        time_for_current_job = estimated_audio_duration  # phút
+        
+        # ✅ THÊM: Tổng thời gian = jobs trước + job hiện tại
+        total_wait_minutes = time_for_jobs_ahead + time_for_current_job
+        print(f"Estimated wait time for job {job_id}: {total_wait_minutes} minutes")
+        # ✅ THÊM: Tính thời điểm hoàn thành
+        estimate_time_complete = (datetime.now() + timedelta(minutes=total_wait_minutes)).isoformat()
+        print(f"Estimated completion time for job {job_id}: {estimate_time_complete}")
+        print("===================================")
         job_data = {
             "job_id": job_id,
             "status": JobStatus.PENDING,
@@ -267,7 +286,11 @@ class JobService:
             "completed_at": None,
             "queue_position": None,
             "background":background,
-            "character":character
+            "character":character,
+            "estimated_audio_duration": estimated_audio_duration,  # Lưu để tính sau
+            "estimate_time_complete": estimate_time_complete,
+
+            "retry_count": 0 
         }
         
         async def _insert_job():
@@ -330,8 +353,6 @@ class JobService:
         
     #     return job_data
     async def get_job_status(self, job_id: str) -> Dict[str, Any]:
-        """Lấy job status từ MongoDB với retry logic"""
-        
         async def _get_job():
             return await job_repository.find_job_by_id(job_id)
         
@@ -347,9 +368,16 @@ class JobService:
                 return None
                 
             # Cập nhật queue position cho pending jobs
-            if job_data["status"] == JobStatus.PENDING:
+            if job_data["status"] == JobStatus.PENDING or job_data["status"] == JobStatus.PROCESSING:
                 position = await self.get_queue_position(job_id)
                 job_data["queue_position"] = position
+                
+                # ✅ THÊM: Tính estimate_waiting_time (phút còn lại)
+                if job_data.get("estimate_time_complete"):
+                    estimate_complete = datetime.fromisoformat(job_data["estimate_time_complete"])
+                    now = datetime.now()
+                    remaining_minutes = max(0, int((estimate_complete - now).total_seconds() / 60))
+                    job_data["estimate_waiting_time"] = remaining_minutes
             
             return job_data
             
@@ -443,6 +471,75 @@ class JobService:
         except Exception as e:
             print(f"Error updating job in Redis: {e}")
 
+    # async def process_jobs(self):
+    #     print("Job worker started")
+        
+    #     while True:
+    #         try:
+    #             job_data = await self.job_queue.get()
+    #             job_id = job_data["job_id"]
+                
+    #             current_job_db = await job_repository.find_job_by_id(job_id)
+    #             if current_job_db and current_job_db.get("status") == JobStatus.FAILED:
+    #                 print(f"Skipping cancelled job: {job_id}")
+    #                 self.job_queue.task_done()
+    #                 continue
+    #             # ✅ XÓA khỏi tracking list NGAY SAU KHI lấy từ queue
+    #             async with self.queue_lock:
+    #                 if job_id in self.waiting_job_ids:
+    #                     self.waiting_job_ids.remove(job_id)
+                
+    #             print(f"Processing job: {job_id}")
+    #             print(f"Remaining in queue: {self.waiting_job_ids}")
+                
+    #             print("download image=======================")
+    #             images_pathdown, audio_path_down = await download_assets(job_data)
+                
+    #             async with self.video_processing_lock:
+    #                 self.current_processing_job = job_id
+                    
+    #                 await self.update_job_status(job_id, JobStatus.PROCESSING, progress=10)
+                    
+    #                 from app.services.video_service import VideoService
+    #                 video_service = VideoService()
+                    
+    #                 try:
+    #                     print(f"Creating video for job: {job_id}")
+    #                     video_path, list_scene = await video_service.create_video(
+    #                         image_paths=images_pathdown,
+    #                         prompts=job_data["prompts"],
+    #                         audio_path=audio_path_down,
+    #                         resolution=job_data["resolution"],
+    #                         job_id=job_id,
+    #                         character=job_data.get("character", ""),
+    #                         background=job_data.get("background", "")
+    #                     )
+                        
+    #                     await self.update_job_status(
+    #                         job_id, 
+    #                         JobStatus.COMPLETED, 
+    #                         progress=100,
+    #                         video_path=video_path,
+    #                         list_scene=list_scene
+    #                     )
+    #                     print(f"Job completed: {job_id}")
+                        
+    #                 except Exception as e:
+    #                     print(f"Job failed: {job_id}, Error: {e}")
+    #                     await self.update_job_status(
+    #                         job_id,
+    #                         JobStatus.FAILED,
+    #                         error_message=str(e)
+    #                     )
+                    
+    #                 finally:
+    #                     self.current_processing_job = None
+                
+    #             self.job_queue.task_done()
+                
+    #         except Exception as e:
+    #             print(f"Error in job worker: {e}")
+    #             await asyncio.sleep(1)
     async def process_jobs(self):
         print("Job worker started")
         
@@ -453,10 +550,13 @@ class JobService:
                 
                 current_job_db = await job_repository.find_job_by_id(job_id)
                 if current_job_db and current_job_db.get("status") == JobStatus.FAILED:
-                    print(f"Skipping cancelled job: {job_id}")
-                    self.job_queue.task_done()
-                    continue
-                # ✅ XÓA khỏi tracking list NGAY SAU KHI lấy từ queue
+                    # ✅ THÊM: Kiểm tra nếu đã retry rồi thì skip
+                    if current_job_db.get("retry_count", 0) >= 1:
+                        print(f"Skipping failed job (already retried): {job_id}")
+                        self.job_queue.task_done()
+                        continue
+                
+                # Xóa khỏi tracking list
                 async with self.queue_lock:
                     if job_id in self.waiting_job_ids:
                         self.waiting_job_ids.remove(job_id)
@@ -498,11 +598,39 @@ class JobService:
                         
                     except Exception as e:
                         print(f"Job failed: {job_id}, Error: {e}")
-                        await self.update_job_status(
-                            job_id,
-                            JobStatus.FAILED,
-                            error_message=str(e)
-                        )
+                        
+                        # ✅ THÊM: Logic retry
+                        current_retry_count = job_data.get("retry_count", 1)
+                        
+                        if current_retry_count < 1:  # Chỉ retry 1 lần
+                            print(f"Retrying job {job_id} (attempt {current_retry_count + 1}/1)")
+                            
+                            # Tăng retry_count
+                            job_data["retry_count"] = current_retry_count + 1
+                            job_data["status"] = JobStatus.PENDING
+                            job_data["error_message"] = None
+                            
+                            # Cập nhật trong DB
+                            await job_repository.update_job(job_id, {
+                                "retry_count": current_retry_count + 1,
+                                "status": JobStatus.PENDING,
+                                "error_message": f"Retrying after error: {str(e)}"
+                            })
+                            
+                            # ✅ Đưa job xuống cuối queue
+                            async with self.queue_lock:
+                                self.waiting_job_ids.append(job_id)
+                            await self.job_queue.put(job_data)
+                            
+                            print(f"Job {job_id} added back to queue at position {len(self.waiting_job_ids)}")
+                        else:
+                            # Đã retry rồi, mark as FAILED vĩnh viễn
+                            print(f"Job {job_id} failed after retry, marking as FAILED")
+                            await self.update_job_status(
+                                job_id,
+                                JobStatus.FAILED,
+                                error_message=f"Failed after 1 retry: {str(e)}"
+                            )
                     
                     finally:
                         self.current_processing_job = None

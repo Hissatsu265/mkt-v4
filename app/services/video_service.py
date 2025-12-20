@@ -981,7 +981,7 @@ async def start_comfyui():
 
     print(f"🚀 ComfyUI started (PID: {process.pid}) — đang chờ server mở port {PORT}...")
 
-    ready = await wait_for_port_async(HOST, PORT, timeout=300)
+    ready = await wait_for_port_async(HOST, PORT, timeout=400)
 
     if not ready:
         print("⚠️ ComfyUI không khởi động được đúng cách (port không mở).")
@@ -1806,7 +1806,7 @@ async def start_comfyui1():
         stderr=asyncio.subprocess.PIPE
     )
     print(f"🚀 ComfyUI started (PID: {process.pid})")
-    ready = await wait_for_port_async(HOST, PORT, timeout=240)
+    ready = await wait_for_port_async(HOST, PORT, timeout=400)
 
     if not ready:
         print("⚠️ ComfyUI không khởi động được đúng cách (port không mở).")

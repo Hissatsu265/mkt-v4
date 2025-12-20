@@ -180,21 +180,19 @@ async def create_video(request: VideoCreateRequest):
 # =============================================================================
 @router.get("/jobs/{job_id}/status", response_model=JobStatusResponse)
 async def get_job_status(job_id: str):
-    
     job_data = await job_service.get_job_status(job_id)
     print("Job data:", job_data)
+    
     if not job_data:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Job not found"
         )
     
-    if job_data["status"] == JobStatus.PENDING:
-        queue_info = await job_service.get_queue_info()
-        job_data["queue_position"] = job_data.get("queue_position", 0)
-        job_data["estimated_wait_time"] = job_data["queue_position"] * 5  # 5 phút/job
-        job_data["is_processing"] = queue_info["is_processing"]
-        job_data["current_processing_job"] = queue_info["current_processing"]
+    # ✅ BỎ ĐOẠN NÀY (logic đã chuyển vào job_service.get_job_status)
+    # if job_data["status"] == JobStatus.PENDING:
+    #     queue_info = await job_service.get_queue_info()
+    #     ...
     
     return JobStatusResponse(**job_data)
 
