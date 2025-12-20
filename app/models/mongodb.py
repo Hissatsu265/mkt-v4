@@ -14,14 +14,14 @@ class MongoDB:
         """Kết nối async MongoDB"""
         try:
             # Sử dụng connection string từ config
-            from config import MONGODB_URI, MONGODB_DATABASE
-            
+            from config import MONGODB_URI, MONGODB_DATABASE, MONGODB_JOBS_COLLECTION, MONGODB_EFFECT_JOBS_COLLECTION
+
             self.client = AsyncIOMotorClient(MONGODB_URI)
             self.db = self.client[MONGODB_DATABASE]
-            
+
             # Tạo collections
-            self.jobs_col = self.db["jobs"]
-            self.effect_jobs_col = self.db["effect_jobs"]
+            self.jobs_col = self.db[MONGODB_JOBS_COLLECTION]
+            self.effect_jobs_col = self.db[MONGODB_EFFECT_JOBS_COLLECTION]
             
             # Test connection
             await self.client.admin.command('ping')

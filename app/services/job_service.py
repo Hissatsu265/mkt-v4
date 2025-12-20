@@ -62,6 +62,8 @@ class JobService:
 
         self.waiting_job_ids: List[str] = []
         self.queue_lock = asyncio.Lock()
+        
+        self.recovery_completed = False 
 
         self.job_queue = asyncio.Queue()
         self.effect_job_queue = asyncio.Queue()
@@ -134,6 +136,8 @@ class JobService:
         try:
             await mongodb.connect()
             print("MongoDB initialized successfully")
+            # ✅ THÊM: Recovery jobs sau khi connect MongoDB
+            await self.recover_pending_jobs()
         except Exception as e:
             print(f"MongoDB initialization failed: {e}")
             raise
@@ -175,7 +179,67 @@ class JobService:
                 print(f"Cleanup completed at {datetime.now()}")
             except Exception as e:
                 print(f"Cleanup error: {e}")
-
+    async def recover_pending_jobs(self):
+        """Khôi phục các job PENDING và PROCESSING từ MongoDB sau khi server restart"""
+        
+        if self.recovery_completed:
+            print("Job recovery already completed, skipping...")
+            return
+        
+        try:
+            print("🔄 Starting job recovery process...")
+            
+            # Lấy tất cả job PENDING và PROCESSING từ MongoDB
+            pending_jobs = await job_repository.find_jobs_by_status(JobStatus.PENDING)
+            processing_jobs = await job_repository.find_jobs_by_status(JobStatus.PROCESSING)
+            
+            all_jobs = pending_jobs + processing_jobs
+            
+            if not all_jobs:
+                print("✅ No jobs to recover")
+                self.recovery_completed = True
+                return
+            
+            # Sắp xếp theo thời gian tạo (job cũ nhất lên đầu)
+            all_jobs.sort(key=lambda x: x.get("created_at", ""))
+            
+            print(f"📋 Found {len(all_jobs)} jobs to recover:")
+            print(f"   - PENDING: {len(pending_jobs)}")
+            print(f"   - PROCESSING: {len(processing_jobs)}")
+            
+            recovered_count = 0
+            
+            async with self.queue_lock:
+                for job in all_jobs:
+                    job_id = job["job_id"]
+                    
+                    # Reset job về trạng thái PENDING nếu đang PROCESSING
+                    if job["status"] == JobStatus.PROCESSING:
+                        print(f"   🔄 Resetting PROCESSING job to PENDING: {job_id}")
+                        await job_repository.update_job(job_id, {
+                            "status": JobStatus.PENDING,
+                            "progress": 0,
+                            "error_message": "Job was interrupted by server restart"
+                        })
+                        job["status"] = JobStatus.PENDING
+                    
+                    # Thêm vào queue và tracking list
+                    self.waiting_job_ids.append(job_id)
+                    await self.job_queue.put(job.copy())
+                    recovered_count += 1
+                    
+                    print(f"   ✅ Recovered job: {job_id} (position: {len(self.waiting_job_ids)})")
+            
+            print(f"✅ Job recovery completed: {recovered_count} jobs recovered")
+            self.recovery_completed = True
+            
+            # Khởi động worker để xử lý các job đã recovery
+            await self.start_worker()
+            
+        except Exception as e:
+            print(f"❌ Error during job recovery: {e}")
+            # Không raise error để server vẫn khởi động được
+            self.recovery_completed = True 
     async def cleanup_old_jobs(self):
         """Xóa job cũ khỏi memory và Redis"""
         from config import JOB_RETENTION_HOURS
@@ -252,6 +316,15 @@ class JobService:
         return {"message": "Manual cleanup completed"}
 
     async def create_job(self, image_paths: list, prompts: list, audio_path: str, resolution: str = "1920x1080",background:str="",character:str="") -> str:
+
+        if not self.recovery_completed:
+            print("⏳ Waiting for job recovery to complete...")
+            # Đợi tối đa 10 giây
+            for _ in range(100):
+                if self.recovery_completed:
+                    break
+                await asyncio.sleep(0.1)
+
         job_id = str(uuid.uuid4())
         estimated_audio_duration = random.randint(25, 34)  # giây
     
@@ -267,11 +340,9 @@ class JobService:
         
         # ✅ THÊM: Tổng thời gian = jobs trước + job hiện tại
         total_wait_minutes = time_for_jobs_ahead + time_for_current_job
-        print(f"Estimated wait time for job {job_id}: {total_wait_minutes} minutes")
         # ✅ THÊM: Tính thời điểm hoàn thành
         estimate_time_complete = (datetime.now() + timedelta(minutes=total_wait_minutes)).isoformat()
-        print(f"Estimated completion time for job {job_id}: {estimate_time_complete}")
-        print("===================================")
+        
         job_data = {
             "job_id": job_id,
             "status": JobStatus.PENDING,
@@ -311,8 +382,13 @@ class JobService:
         async with self.queue_lock:
             self.waiting_job_ids.append(job_id)
             await self.job_queue.put(job_data.copy())
+        # print("===================================")
+        # print(self.job_queue)
+        # print("Current job queue:", self.waiting_job_ids)
+        # print("===================================")
         # Thêm vào queue
-        await self.job_queue.put(job_data.copy())
+
+        # await self.job_queue.put(job_data.copy())
         
         # Start worker và cleanup
         await self.start_worker()
