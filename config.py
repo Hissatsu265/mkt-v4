@@ -40,6 +40,14 @@ ENABLE_PARALLEL_PROCESSING = os.getenv("ENABLE_PARALLEL_PROCESSING", "true").low
 # ComfyUI Configuration
 COMFYUI_BASE_PORT = int(os.getenv("COMFYUI_BASE_PORT", 8188))  # Starting port for ComfyUI instances (8188, 8189, 8190...)
 
+# Job Time Estimation
+AVERAGE_JOB_TIME_MINUTES = int(os.getenv("AVERAGE_JOB_TIME_MINUTES", 25))  # Average time per job
+
+# Job Retry Configuration
+MAX_JOB_RETRIES = int(os.getenv("MAX_JOB_RETRIES", 3))  # Number of retry attempts (default: 3)
+RETRY_DELAY_SECONDS = int(os.getenv("RETRY_DELAY_SECONDS", 30))  # Delay between retries in seconds (default: 30s)
+USE_EXPONENTIAL_BACKOFF = os.getenv("USE_EXPONENTIAL_BACKOFF", "true").lower() == "true"  # Use exponential backoff for retries
+
 # =======================================
 SERVER_COMFYUI="127.0.0.1:8188"
 WORKFLOW_INFINITETALK_PATH="/workflow/InfiniteTalk_api_ver2.json"

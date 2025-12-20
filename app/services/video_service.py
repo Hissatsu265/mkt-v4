@@ -1161,7 +1161,19 @@ async def wait_for_completion(prompt_id, client_id, server_address_override=None
                             print(f"📊 Node {node}: {value}/{max_value} ({percentage:.1f}%)")
                         
                         elif data["type"] == "execution_error":
-                            print(f"❌ Error: {data}")
+                            error_data = data.get("data", {})
+                            node_id = error_data.get("node_id", "unknown")
+                            node_type = error_data.get("node_type", "unknown")
+                            exception_message = error_data.get("exception_message", "No message")
+                            exception_type = error_data.get("exception_type", "Unknown")
+                            traceback_text = error_data.get("traceback", "No traceback")
+
+                            print(f"❌ WORKFLOW ERROR DETAILS:")
+                            print(f"   Node ID: {node_id}")
+                            print(f"   Node Type: {node_type}")
+                            print(f"   Exception: {exception_type}: {exception_message}")
+                            print(f"   Traceback: {traceback_text[:500]}")  # First 500 chars
+                            print(f"   Full error data: {error_data}")
                             return False
                             
                         elif data["type"] == "execution_cached":

@@ -269,12 +269,16 @@ async def cancel_job(job_id: str):
 async def get_queue_info():
     """Lấy thông tin queue hiện tại"""
     queue_info = await job_service.get_queue_info()
+    video_workers = queue_info.get("video_workers", {})
+    is_processing = video_workers.get("busy_workers", 0) > 0
+
     return {
         "pending_jobs": queue_info["pending_jobs"],
-        "is_processing": queue_info["is_processing"],
-        "current_processing_job": queue_info["current_processing"],
+        "is_processing": is_processing,
+        "current_processing_job": None,  # Multi-worker system doesn't track single job
         "worker_status": "running" if queue_info["worker_running"] else "stopped",
-        "estimated_total_wait_time": queue_info["pending_jobs"] * 5  # phút
+        "estimated_total_wait_time": queue_info["pending_jobs"] * 5,  # phút
+        "video_workers": video_workers  # Include worker details
     }
 
 @router.get("/jobs")
@@ -747,12 +751,16 @@ async def cancel_job(job_id: str):
 async def get_queue_info():
     """Lấy thông tin queue hiện tại"""
     queue_info = await job_service.get_queue_info()
+    video_workers = queue_info.get("video_workers", {})
+    is_processing = video_workers.get("busy_workers", 0) > 0
+
     return {
         "pending_jobs": queue_info["pending_jobs"],
-        "is_processing": queue_info["is_processing"],
-        "current_processing_job": queue_info["current_processing"],
+        "is_processing": is_processing,
+        "current_processing_job": None,  # Multi-worker system doesn't track single job
         "worker_status": "running" if queue_info["worker_running"] else "stopped",
-        "estimated_total_wait_time": queue_info["pending_jobs"] * 5  # phút
+        "estimated_total_wait_time": queue_info["pending_jobs"] * 5,  # phút
+        "video_workers": video_workers  # Include worker details
     }
 
 @router.get("/health")

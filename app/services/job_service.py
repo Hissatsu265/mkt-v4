@@ -302,9 +302,9 @@ class JobService:
             
             print(f"✅ Job recovery completed: {recovered_count} jobs recovered")
             self.recovery_completed = True
-            
-            # Khởi động worker để xử lý các job đã recovery
-            await self.start_worker()
+
+            # Khởi động workers để xử lý các job đã recovery
+            await self.start_video_workers()
             
         except Exception as e:
             print(f"❌ Error during job recovery: {e}")
@@ -396,21 +396,45 @@ class JobService:
                 await asyncio.sleep(0.1)
 
         job_id = str(uuid.uuid4())
-        estimated_audio_duration = random.randint(25, 34)  # giây
-    
-        # ✅ THÊM: Tính số job đang chờ
+
+        # Calculate accurate time estimation for multi-GPU parallel processing
         async with self.queue_lock:
-            jobs_ahead = len(self.waiting_job_ids)+1
-        
-        # ✅ THÊM: Tính thời gian chờ (mỗi job trước đó random 20-27 phút)
-        time_for_jobs_ahead = sum(random.randint(20, 27) for _ in range(jobs_ahead))
-        
-        # ✅ THÊM: Thời gian tạo video (1 giây audio = 1 phút)
-        time_for_current_job = estimated_audio_duration  # phút
-        
-        # ✅ THÊM: Tổng thời gian = jobs trước + job hiện tại
-        total_wait_minutes = time_for_jobs_ahead + time_for_current_job
-        # ✅ THÊM: Tính thời điểm hoàn thành
+            queue_length = len(self.waiting_job_ids)
+
+        # Get worker availability
+        workers_info = await self.get_video_workers_info()
+        total_workers = workers_info.get("total_workers", 1)
+        available_workers = workers_info.get("available_workers", total_workers)
+
+        # Use actual workers, not zero
+        active_workers = max(1, total_workers)
+
+        # Calculate position in queue: waiting jobs + this new job
+        # Example: 3 waiting + 1 new = position 4
+        position_in_queue = queue_length + 1
+
+        # Calculate which batch this job belongs to
+        # Example: position 4 with 2 workers = ceil(4/2) = batch 2
+        import math
+        batch_number = math.ceil(position_in_queue / active_workers)
+
+        # If there are available workers, current batch is 0 (starts immediately)
+        # If all workers busy, we're in future batches
+        if available_workers >= active_workers:
+            # All workers available, job starts in first batch (batch 0)
+            batches_to_wait = batch_number - 1
+        else:
+            # Some workers busy, count from current batch
+            # Jobs already processing are in batch 1, so we wait batch_number batches
+            batches_to_wait = batch_number
+
+        # Average job time from config (default 25 minutes)
+        from config import AVERAGE_JOB_TIME_MINUTES
+
+        # Total time = batches to wait * average time per batch
+        total_wait_minutes = batches_to_wait * AVERAGE_JOB_TIME_MINUTES
+
+        # Store calculation metadata for debugging
         estimate_time_complete = (datetime.now() + timedelta(minutes=total_wait_minutes)).isoformat()
         
         job_data = {
@@ -428,7 +452,6 @@ class JobService:
             "queue_position": None,
             "background":background,
             "character":character,
-            "estimated_audio_duration": estimated_audio_duration,  # Lưu để tính sau
             "estimate_time_complete": estimate_time_complete,
 
             "retry_count": 0 
@@ -518,14 +541,20 @@ class JobService:
             if job_data["status"] == JobStatus.PENDING or job_data["status"] == JobStatus.PROCESSING:
                 position = await self.get_queue_position(job_id)
                 job_data["queue_position"] = position
-                
+
                 # ✅ THÊM: Tính estimate_waiting_time (phút còn lại)
                 if job_data.get("estimate_time_complete"):
                     estimate_complete = datetime.fromisoformat(job_data["estimate_time_complete"])
                     now = datetime.now()
                     remaining_minutes = max(0, int((estimate_complete - now).total_seconds() / 60))
                     job_data["estimate_waiting_time"] = remaining_minutes
-            
+
+            # Add retry information to response
+            from config import MAX_JOB_RETRIES
+            job_data["retry_count"] = job_data.get("retry_count", 0)
+            job_data["max_retries"] = MAX_JOB_RETRIES
+            job_data["retries_remaining"] = MAX_JOB_RETRIES - job_data.get("retry_count", 0)
+
             return job_data
             
         except Exception as e:
@@ -753,37 +782,48 @@ class JobService:
                     except Exception as e:
                         print(f"[Worker {worker_id}] ❌ Job failed: {job_id}, Error: {e}")
 
-                        # ✅ THÊM: Logic retry
+                        # Enhanced retry logic with configurable retries and exponential backoff
+                        from config import MAX_JOB_RETRIES, RETRY_DELAY_SECONDS, USE_EXPONENTIAL_BACKOFF
+
                         current_retry_count = job_data.get("retry_count", 0)
 
-                        if current_retry_count < 1:  # Chỉ retry 1 lần
-                            print(f"[Worker {worker_id}] 🔄 Retrying job {job_id} (attempt {current_retry_count + 1}/1)")
+                        if current_retry_count < MAX_JOB_RETRIES:
+                            print(f"[Worker {worker_id}] 🔄 Scheduling retry for job {job_id} (attempt {current_retry_count + 1}/{MAX_JOB_RETRIES})")
 
-                            # Tăng retry_count
+                            # Calculate delay with exponential backoff if enabled
+                            if USE_EXPONENTIAL_BACKOFF:
+                                # Exponential backoff: delay * (2 ^ retry_count)
+                                # Example: 30s, 60s, 120s, 240s...
+                                delay = RETRY_DELAY_SECONDS * (2 ** current_retry_count)
+                                print(f"[Worker {worker_id}] ⏰ Will retry in {delay}s (exponential backoff)")
+                            else:
+                                # Fixed delay
+                                delay = RETRY_DELAY_SECONDS
+                                print(f"[Worker {worker_id}] ⏰ Will retry in {delay}s")
+
+                            # Increment retry count
                             job_data["retry_count"] = current_retry_count + 1
                             job_data["status"] = JobStatus.PENDING
                             job_data["error_message"] = None
 
-                            # Cập nhật trong DB
+                            # Update in DB
                             await job_repository.update_job(job_id, {
                                 "retry_count": current_retry_count + 1,
                                 "status": JobStatus.PENDING,
-                                "error_message": f"Retrying after error: {str(e)}"
+                                "error_message": f"Retry {current_retry_count + 1}/{MAX_JOB_RETRIES} scheduled in {delay}s after error: {str(e)}"
                             })
 
-                            # ✅ Đưa job xuống cuối queue
-                            async with self.queue_lock:
-                                self.waiting_job_ids.append(job_id)
-                            await self.job_queue.put(job_data)
+                            # Schedule retry as background task (doesn't block worker)
+                            asyncio.create_task(self._schedule_retry(job_id, job_data, delay))
 
-                            print(f"[Worker {worker_id}] Job {job_id} added back to queue at position {len(self.waiting_job_ids)}")
+                            print(f"[Worker {worker_id}] ✅ Retry scheduled for job {job_id} in {delay}s")
                         else:
-                            # Đã retry rồi, mark as FAILED vĩnh viễn
-                            print(f"[Worker {worker_id}] 💀 Job {job_id} failed permanently after retry")
+                            # Max retries reached, mark as FAILED permanently
+                            print(f"[Worker {worker_id}] 💀 Job {job_id} failed permanently after {MAX_JOB_RETRIES} retries")
                             await self.update_job_status(
                                 job_id,
                                 JobStatus.FAILED,
-                                error_message=f"Failed after 1 retry: {str(e)}"
+                                error_message=f"Failed after {MAX_JOB_RETRIES} retries: {str(e)}"
                             )
 
                     finally:
@@ -794,6 +834,22 @@ class JobService:
             except Exception as e:
                 print(f"[Worker {worker_id}] ⚠️  Error in worker: {e}")
                 await asyncio.sleep(1)
+
+    async def _schedule_retry(self, job_id: str, job_data: dict, delay: int):
+        """Schedule a job retry after a delay (runs in background, doesn't block workers)"""
+        try:
+            print(f"[Retry Scheduler] ⏳ Waiting {delay}s before retrying job {job_id}")
+            await asyncio.sleep(delay)
+
+            # Add job back to queue after delay
+            async with self.queue_lock:
+                self.waiting_job_ids.append(job_id)
+            await self.job_queue.put(job_data)
+
+            print(f"[Retry Scheduler] ✅ Job {job_id} added back to queue (position {len(self.waiting_job_ids)})")
+
+        except Exception as e:
+            print(f"[Retry Scheduler] ❌ Error scheduling retry for {job_id}: {e}")
 
     async def get_video_workers_info(self):
         """Get information about video workers"""
