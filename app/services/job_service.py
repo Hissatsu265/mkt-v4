@@ -5,10 +5,11 @@ import uuid
 import os
 import psutil
 from directus.function_downloadfile import download_image,download_audio
-from typing import List 
+from typing import List
 from datetime import datetime, timedelta
 from typing import Dict, Any
 from pathlib import Path
+from utilities.audio_duration import get_audio_duration
 
 # Make redis optional for serverless environments
 try:
@@ -25,6 +26,12 @@ from app.services.job_repository import job_repository
 
 import random
 import re
+
+# ✅ AUDIO TO PROCESSING TIME RATIO
+# Change this value to adjust the relationship between audio duration and processing time
+# Example: 1.2 means 1 second of audio = 1.2 minutes of processing time
+# So a 5-second audio file will take 6 minutes to process (5 * 1.2 = 6)
+AUDIO_TO_PROCESSING_RATIO = 1.2
 
 URL_REGEX = re.compile(
     r'^(https?://)'
@@ -397,6 +404,24 @@ class JobService:
 
         job_id = str(uuid.uuid4())
 
+        # ✅ Extract audio duration for accurate time estimation (1s audio = 1min processing)
+        audio_duration = None
+        try:
+            # Download audio file if URL, or use local path
+            if audio_path.startswith("http://") or audio_path.startswith("https://"):
+                audio_local_path = await asyncio.to_thread(download_audio, audio_path)
+            else:
+                audio_local_path = audio_path
+
+            # Extract duration in seconds
+            audio_duration = await asyncio.to_thread(get_audio_duration, audio_local_path)
+            print(f"[Job {job_id}] Audio duration: {audio_duration}s → Estimated processing time: {audio_duration}min")
+        except Exception as e:
+            # Fallback to default if audio duration extraction fails
+            from config import AVERAGE_JOB_TIME_MINUTES
+            print(f"[Job {job_id}] Failed to extract audio duration: {e}. Using fallback: {AVERAGE_JOB_TIME_MINUTES}min")
+            audio_duration = AVERAGE_JOB_TIME_MINUTES * 60  # Convert to seconds (1min = 60s)
+
         # Calculate accurate time estimation for multi-GPU parallel processing
         async with self.queue_lock:
             queue_length = len(self.waiting_job_ids)
@@ -428,11 +453,14 @@ class JobService:
             # Jobs already processing are in batch 1, so we wait batch_number batches
             batches_to_wait = batch_number
 
-        # Average job time from config (default 25 minutes)
-        from config import AVERAGE_JOB_TIME_MINUTES
+        # ✅ Use audio duration for job time estimation (1s audio = 1.2min processing)
+        # audio_duration is in seconds, processing time in minutes (1:1.2 ratio seconds→minutes)
+        # Example: 5s audio → 6 minutes processing time
+        job_processing_time_minutes = audio_duration * AUDIO_TO_PROCESSING_RATIO
 
-        # Total time = batches to wait * average time per batch
-        total_wait_minutes = batches_to_wait * AVERAGE_JOB_TIME_MINUTES
+        # Total time = batches to wait * this job's processing time + queue wait
+        # Queue wait assumes previous jobs also take similar time
+        total_wait_minutes = batches_to_wait * job_processing_time_minutes
 
         # Store calculation metadata for debugging
         estimate_time_complete = (datetime.now() + timedelta(minutes=total_wait_minutes)).isoformat()
@@ -443,6 +471,7 @@ class JobService:
             "image_paths": image_paths,
             "prompts": prompts,
             "audio_path": audio_path,
+            "audio_duration": audio_duration,  # ✅ Store audio duration in seconds
             "resolution": resolution,
             "progress": 0,
             "video_path": None,
@@ -454,7 +483,7 @@ class JobService:
             "character":character,
             "estimate_time_complete": estimate_time_complete,
 
-            "retry_count": 0 
+            "retry_count": 0
         }
         
         async def _insert_job():
@@ -542,12 +571,97 @@ class JobService:
                 position = await self.get_queue_position(job_id)
                 job_data["queue_position"] = position
 
-                # ✅ THÊM: Tính estimate_waiting_time (phút còn lại)
-                if job_data.get("estimate_time_complete"):
-                    estimate_complete = datetime.fromisoformat(job_data["estimate_time_complete"])
-                    now = datetime.now()
-                    remaining_minutes = max(0, int((estimate_complete - now).total_seconds() / 60))
-                    job_data["estimate_waiting_time"] = remaining_minutes
+                # ✅ Tính estimate_waiting_time (phút còn lại)
+                if job_data["status"] == JobStatus.PROCESSING:
+                    # Job đang chạy - tính dựa trên audio duration và progress
+                    if job_data.get("started_at"):
+                        from config import AVERAGE_JOB_TIME_MINUTES
+                        started_at = datetime.fromisoformat(job_data["started_at"])
+                        elapsed_seconds = (datetime.now() - started_at).total_seconds()
+                        progress = job_data.get("progress", 1)
+
+                        # ✅ Use audio_duration if available (1s audio = 1.2min processing)
+                        audio_duration = job_data.get("audio_duration")
+
+                        if audio_duration and progress > 0 and progress < 100:
+                            # Total estimated time = audio_duration in seconds → minutes (1:1.2 ratio)
+                            # Example: 5s audio = 6 minutes processing
+                            estimated_total_minutes = audio_duration * AUDIO_TO_PROCESSING_RATIO
+                            estimated_total_seconds = estimated_total_minutes * 60
+
+                            # Calculate remaining based on progress
+                            completed_seconds = estimated_total_seconds * (progress / 100)
+                            remaining_seconds = max(0, estimated_total_seconds - elapsed_seconds)
+                            # Round up để luôn hiển thị ít nhất 1 phút nếu còn time
+                            remaining_minutes = max(1, int((remaining_seconds + 59) / 60))
+                        elif progress > 0 and progress < 100:
+                            # Fallback: calculate based on elapsed time and progress
+                            estimated_total_seconds = (elapsed_seconds / progress) * 100
+                            remaining_seconds = max(0, estimated_total_seconds - elapsed_seconds)
+                            remaining_minutes = max(1, int((remaining_seconds + 59) / 60))
+                        else:
+                            # Fallback nếu không có progress data
+                            remaining_minutes = AVERAGE_JOB_TIME_MINUTES
+
+                        job_data["estimate_waiting_time"] = remaining_minutes
+                    else:
+                        # Không có started_at, dùng estimate cũ
+                        from config import AVERAGE_JOB_TIME_MINUTES
+                        job_data["estimate_waiting_time"] = AVERAGE_JOB_TIME_MINUTES
+
+                elif job_data["status"] == JobStatus.PENDING:
+                    # ✅ IMPROVED: Calculate based on actual queue and audio durations
+                    # Need to account for:
+                    # 1. Currently processing jobs
+                    # 2. Jobs ahead in queue with their audio durations
+
+                    from config import AVERAGE_JOB_TIME_MINUTES
+
+                    # Get this job's audio duration
+                    this_job_duration = job_data.get("audio_duration", AVERAGE_JOB_TIME_MINUTES * 60)
+
+                    # Calculate wait time from jobs ahead
+                    wait_time_minutes = 0
+
+                    # Get workers info to know how many jobs are processing
+                    workers_info = await self.get_video_workers_info()
+                    busy_workers = workers_info.get("busy_workers", 0)
+                    total_workers = workers_info.get("total_workers", 1)
+
+                    # If workers are busy, need to wait for them to finish
+                    if busy_workers > 0:
+                        # Estimate remaining time for processing jobs (use average)
+                        # TODO: Could be improved by tracking actual processing jobs
+                        wait_time_minutes += AVERAGE_JOB_TIME_MINUTES
+
+                    # Get queue position
+                    queue_pos = position  # Already calculated above
+
+                    if queue_pos > 0:
+                        # Get jobs ahead in queue and sum their durations
+                        async with self.queue_lock:
+                            jobs_ahead_count = queue_pos - 1
+
+                            # Estimate time for jobs ahead
+                            # If we have jobs in waiting_job_ids, calculate their durations
+                            for idx in range(min(jobs_ahead_count, len(self.waiting_job_ids))):
+                                ahead_job_id = self.waiting_job_ids[idx]
+
+                                # Fetch that job's audio_duration from DB
+                                try:
+                                    ahead_job = await job_repository.find_job_by_id(ahead_job_id)
+                                    if ahead_job:
+                                        ahead_duration = ahead_job.get("audio_duration", AVERAGE_JOB_TIME_MINUTES * 60)
+                                        wait_time_minutes += ahead_duration * AUDIO_TO_PROCESSING_RATIO  # 1s = 1.2min
+                                except:
+                                    # Fallback if can't fetch
+                                    wait_time_minutes += AVERAGE_JOB_TIME_MINUTES
+
+                        # Account for parallel workers (jobs can process in parallel)
+                        if total_workers > 1:
+                            wait_time_minutes = wait_time_minutes / total_workers
+
+                    job_data["estimate_waiting_time"] = max(1, int(wait_time_minutes))
 
             # Add retry information to response
             from config import MAX_JOB_RETRIES
