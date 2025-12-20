@@ -37,6 +37,9 @@ GPU_MEMORY_PER_JOB_GB = int(os.getenv("GPU_MEMORY_PER_JOB_GB", 15))  # GPU memor
 GPU_MEMORY_RESERVE_GB = int(os.getenv("GPU_MEMORY_RESERVE_GB", 5))  # Safety buffer for system
 ENABLE_PARALLEL_PROCESSING = os.getenv("ENABLE_PARALLEL_PROCESSING", "true").lower() == "true"  # Enable/disable parallel processing
 
+# ComfyUI Configuration
+COMFYUI_BASE_PORT = int(os.getenv("COMFYUI_BASE_PORT", 8188))  # Starting port for ComfyUI instances (8188, 8189, 8190...)
+
 # =======================================
 SERVER_COMFYUI="127.0.0.1:8188"
 WORKFLOW_INFINITETALK_PATH="/workflow/InfiniteTalk_api_ver2.json"

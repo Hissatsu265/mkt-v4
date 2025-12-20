@@ -14,6 +14,10 @@ async def lifespan(app: FastAPI):
     if job_service.redis_client:
         await job_service.redis_client.close()
 
+    # Shutdown all ComfyUI instances
+    from app.services.video_service import shutdown_all_comfyui
+    await shutdown_all_comfyui()
+
 app = FastAPI(
     title="Video Generator API",
     description="API để tạo video từ ảnh, prompt và audio",

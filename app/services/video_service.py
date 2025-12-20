@@ -1,7 +1,7 @@
 import os
 import uuid
 from pathlib import Path
-from typing import List
+from typing import List, Dict
 import subprocess
 import json
 import random
@@ -37,8 +37,12 @@ image_paths_product_rout360=[]
 video_paths_product_rout360=[]
 event="Christmas"
 full_text_ofauido=""
-first_time_gen=True
-comfy_process = None
+
+# ComfyUI Process Pool - one instance per worker
+comfyui_processes: Dict[int, asyncio.subprocess.Process] = {}  # worker_id -> process
+comfyui_ports: Dict[int, int] = {}  # worker_id -> port
+comfyui_locks: Dict[int, asyncio.Lock] = {}  # worker_id -> lock for that instance
+
 import cv2
 import numpy as np
 
@@ -424,7 +428,7 @@ class VideoService:
         timestamp = int(asyncio.get_event_loop().time())
         return unique_id, f"video_{timestamp}_{unique_id}.mp4"
 
-    async def create_video(self, image_paths: List[str], prompts: List[str], audio_path: str, resolution: str, job_id: str,background:str,character:str) -> str:
+    async def create_video(self, image_paths: List[str], prompts: List[str], audio_path: str, resolution: str, job_id: str,background:str,character:str, worker_id: int = 0) -> str:
         # print("Starting video creation...")
         # print(character)
         # print(background)
@@ -444,7 +448,7 @@ class VideoService:
         try:
             
             await job_service.update_job_status(job_id, "processing", progress=0)
-            list_scene = await run_job(jobid, prompts, image_paths, audio_path, output_path,resolution,character,background)    
+            list_scene = await run_job(jobid, prompts, image_paths, audio_path, output_path,resolution,character,background, worker_id)    
             print("Uploading video to Directus...")
 
             path_directus= Uploadfile_directus(str(output_path))
@@ -464,7 +468,7 @@ class VideoService:
             if output_path.exists():
                 output_path.unlink()
             raise e
-async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_video,resolution,character,background):
+async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_video,resolution,character,background, worker_id: int = 0):
     generate_output_filename = output_path_video
     list_scene=[]
     
@@ -613,10 +617,11 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
                     output=await generate_video_cmd(
                         prompt="The background features soft seasonal lighting, gentle ambient motion, and subtle details that enhance a warm Christmas atmosphere. A stylized cartoon character moves naturally with smooth, mild gestures. Facial features remain calm and steady without exaggerated expressions. Body movements stay relaxed and fluid, creating a believable and festive animated look.",
                         cond_image=result_text2image_path,
-                        cond_audio_path=silent_file, 
+                        cond_audio_path=silent_file,
                         output_path=clip_name_test,
                         job_id=job_id,
-                        resolution=resolution
+                        resolution=resolution,
+                        worker_id=worker_id
                     )
                     os.remove(result_text2image_path)
                     os.remove(silent_file)
@@ -697,22 +702,24 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
             if (list_random[i] == 1):
                 output=await generate_video_cmd(
                     prompt=prompts[current_value],
-                    cond_image=str(file_path),# 
-                    cond_audio_path=audiohavesecondatstart, 
+                    cond_image=str(file_path),#
+                    cond_audio_path=audiohavesecondatstart,
                     output_path=clip_name,
                     job_id=job_id,
-                    resolution=resolution
+                    resolution=resolution,
+                    worker_id=worker_id
                 )
             elif (list_random[i] == 5):
                 clip_name111=os.path.join(os.getcwd(), f"{job_id}_zoomin_{i}.png")
                 zoom_to_face(str(file_path), clip_name111, zoom_factor=2.0)
                 output=await generate_video_cmd(
                     prompt="A realistic video of a person confidently giving a lecture. Their face remains neutral and professional, without expressions or head movement. Their hands move up and down slowly and naturally to emphasize their words without swinging their arms from side to side, creating the impression of a teacher explaining a lesson.",
-                    cond_image=clip_name111,# 
-                    cond_audio_path=audiohavesecondatstart, 
+                    cond_image=clip_name111,#
+                    cond_audio_path=audiohavesecondatstart,
                     output_path=clip_name,
                     job_id=job_id,
-                    resolution=resolution
+                    resolution=resolution,
+                    worker_id=worker_id
                 )
                 os.remove(clip_name111)
             elif (list_random[i] == 9):
@@ -908,7 +915,8 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
             cond_audio_path=audiohavesecondatstart, 
             output_path=generate_output_filename,
             job_id=job_id,
-            resolution=resolution
+            resolution=resolution,
+                    worker_id=worker_id
         )  
         await job_service.update_job_status(job_id, "processing", progress=97)
         # =========================replace audio===================================
@@ -999,22 +1007,98 @@ async def stop_comfyui(process):
             print("⚠️ Force killing ComfyUI...")
             process.kill()
             await process.wait()
+
+# ========== Multi-Worker ComfyUI Process Pool ==========
+async def start_comfyui_for_worker(worker_id: int) -> tuple:
+    """Start a dedicated ComfyUI instance for a specific worker"""
+    from config import COMFYUI_BASE_PORT
+
+    port = COMFYUI_BASE_PORT + worker_id
+    host = "127.0.0.1"
+
+    print(f"[Worker {worker_id}] 🚀 Starting ComfyUI on port {port}...")
+
+    process = await asyncio.create_subprocess_exec(
+        "python3", "main.py", "--port", str(port),
+        cwd=str(BASE_DIR / "ComfyUI"),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE
+    )
+
+    print(f"[Worker {worker_id}] ComfyUI started (PID: {process.pid}), waiting for port {port}...")
+
+    ready = await wait_for_port_async(host, port, timeout=400)
+
+    if not ready:
+        print(f"[Worker {worker_id}] ⚠️ ComfyUI failed to start on port {port}")
+        raise Exception(f"ComfyUI failed to start on port {port}")
+
+    print(f"[Worker {worker_id}] ✅ ComfyUI ready on port {port}")
+
+    return process, port
+
+async def stop_comfyui_for_worker(worker_id: int):
+    """Stop ComfyUI instance for a specific worker"""
+    if worker_id not in comfyui_processes:
+        return
+
+    process = comfyui_processes[worker_id]
+    port = comfyui_ports.get(worker_id, "unknown")
+
+    if process and process.returncode is None:
+        print(f"[Worker {worker_id}] 🛑 Stopping ComfyUI (port {port})...")
+        process.terminate()
+        try:
+            await asyncio.wait_for(process.wait(), timeout=10)
+            print(f"[Worker {worker_id}] ✅ ComfyUI stopped")
+        except asyncio.TimeoutError:
+            print(f"[Worker {worker_id}] ⚠️ Force killing ComfyUI...")
+            process.kill()
+            await process.wait()
+
+    # Cleanup
+    comfyui_processes.pop(worker_id, None)
+    comfyui_ports.pop(worker_id, None)
+
+async def get_or_start_comfyui(worker_id: int) -> tuple:
+    """Get existing ComfyUI for worker or start a new one"""
+    # Initialize lock if needed
+    if worker_id not in comfyui_locks:
+        comfyui_locks[worker_id] = asyncio.Lock()
+
+    async with comfyui_locks[worker_id]:
+        # Check if already running
+        if worker_id in comfyui_processes:
+            process = comfyui_processes[worker_id]
+            if process.returncode is None:  # Still running
+                port = comfyui_ports[worker_id]
+                print(f"[Worker {worker_id}] Reusing existing ComfyUI on port {port}")
+                return process, port
+
+        # Start new instance
+        process, port = await start_comfyui_for_worker(worker_id)
+        comfyui_processes[worker_id] = process
+        comfyui_ports[worker_id] = port
+
+        return process, port
+
 async def load_workflow(path="workflow"):
     async with aiofiles.open(path, "r", encoding='utf-8') as f:
         content = await f.read()
         return json.loads(content)
 
-async def queue_prompt(workflow):
+async def queue_prompt(workflow, server_address_override=None):
     client_id = str(uuid.uuid4())
-    
+    server = server_address_override or server_address  # Use override if provided
+
     payload = {
-        "prompt": workflow, 
+        "prompt": workflow,
         "client_id": client_id
     }
-    
+
     async with aiohttp.ClientSession() as session:
         async with session.post(
-            f"http://{server_address}/prompt",
+            f"http://{server}/prompt",
             json=payload,
             headers={"Content-Type": "application/json"}
         ) as response:
@@ -1025,9 +1109,9 @@ async def queue_prompt(workflow):
             else:
                 raise Exception(f"Failed to queue prompt: {response.status}")
 
-async def wait_for_completion(prompt_id, client_id):
-    
-    websocket_url = f"ws://{server_address}/ws?clientId={client_id}"
+async def wait_for_completion(prompt_id, client_id, server_address_override=None):
+    server = server_address_override or server_address
+    websocket_url = f"ws://{server}/ws?clientId={client_id}"
     
     try:
         async with websockets.connect(websocket_url) as websocket:
@@ -1134,11 +1218,10 @@ async def find_latest_video(prefix, output_dir=str(BASE_DIR / "ComfyUI/output"))
     return await loop.run_in_executor(None, _find_files)
 
 # ========== Hàm chính được cập nhật ==========
-async def generate_video_cmd(prompt, cond_image, cond_audio_path, output_path, job_id,resolution,negative_prompt=""):
-    global first_time_gen,comfy_process 
-    if first_time_gen:
-        first_time_gen=False
-        comfy_process = await start_comfyui()
+async def generate_video_cmd(prompt, cond_image, cond_audio_path, output_path, job_id,resolution, worker_id: int = 0, negative_prompt=""):
+    # Get or start ComfyUI for this worker
+    comfy_process, port = await get_or_start_comfyui(worker_id)
+    server_address_local = f"127.0.0.1:{port}"
 
     try:
         print("🔄 Loading workflow...")
@@ -1207,21 +1290,21 @@ async def generate_video_cmd(prompt, cond_image, cond_audio_path, output_path, j
 # ===========================================================================
         print("📤 Sending workflow to ComfyUI...")
 
-        resp = await queue_prompt(workflow)
+        resp = await queue_prompt(workflow, server_address_local)
         prompt_id = resp["prompt_id"]
         client_id = resp["client_id"]
         print(f"✅ Workflow sent! Prompt ID: {prompt_id}")
 
-        success = await wait_for_completion(prompt_id, client_id)
+        success = await wait_for_completion(prompt_id, client_id, server_address_local)
 
         if not success:
-            print("❌ Workflow failed")
+            print(f"[Worker {worker_id}] ❌ Workflow failed - keeping ComfyUI running for debugging")
             return None
 
         print("🔍 Searching for the generated video...")
 
         video_path = await find_latest_video(prefix)
-        
+
         if video_path:
             await delete_file_async(str(video_path.replace("-audio.mp4",".mp4")))
             await delete_file_async(str(video_path.replace("-audio.mp4",".png")))
@@ -1229,7 +1312,7 @@ async def generate_video_cmd(prompt, cond_image, cond_audio_path, output_path, j
             print(f"📏 File size: {file_size / (1024*1024):.2f} MB")
             # wf_w = 720
             # wf_h = 1280
-            if resolution=="16:9":    
+            if resolution=="16:9":
                 wf_w = 1920
                 wf_h = 1080
             elif resolution=="9:16":
@@ -1243,18 +1326,18 @@ async def generate_video_cmd(prompt, cond_image, cond_audio_path, output_path, j
             )
             await delete_file_async(str(video_path))
 
+            # Only check RAM pressure after successful completion
+            if check_ram_status():
+                print(f"[Worker {worker_id}] 🚨 RAM pressure detected after successful job, restarting ComfyUI...")
+                await stop_comfyui_for_worker(worker_id)
+                # Will auto-restart on next job
+
             return output_path
         else:
-            print("❌ Cannot findout video")
+            print(f"[Worker {worker_id}] ❌ Cannot find output video")
             return None
     finally:
-        if check_ram_status():
-            print("🚨 KÍCH HOẠT RESTART: Giải phóng RAM.")
-            await stop_comfyui(comfy_process)     
-            first_time_gen=True
-            # comfy_process = await start_comfyui() 
-            # print("✅ ComfyUI đã được khởi động lại thành công.")
-        print("✅ Finished generate_video_cmd")
+        print(f"[Worker {worker_id}] ✅ Finished generate_video_cmd")
 
         # await stop_comfyui(comfy_process)
         # comfy_process = await start_comfyui()
@@ -1826,3 +1909,12 @@ async def stop_comfyui1(process):
             print("⚠️ Force killing ComfyUI...")
             process.kill()
             await process.wait()
+
+
+# ========== Shutdown Handler ==========
+async def shutdown_all_comfyui():
+    """Shutdown all ComfyUI instances on app exit"""
+    for worker_id in list(comfyui_processes.keys()):
+        await stop_comfyui_for_worker(worker_id)
+    print("✅ All ComfyUI instances stopped")
+

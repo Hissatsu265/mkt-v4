@@ -638,7 +638,8 @@ class JobService:
                             resolution=job_data["resolution"],
                             job_id=job_id,
                             character=job_data.get("character", ""),
-                            background=job_data.get("background", "")
+                            background=job_data.get("background", ""),
+                            worker_id=worker_id  # NEW: Pass worker ID
                         )
 
                         await self.update_job_status(
