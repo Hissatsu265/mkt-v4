@@ -287,44 +287,52 @@ async def list_jobs(
     limit: int = 50,
     offset: int = 0
 ):
-    """List jobs với filter và pagination"""
-    
+    """List jobs with filter and pagination from MongoDB"""
+
     try:
-        # Lấy stats từ job service
-        stats = await job_service.get_stats()
-        
-        # Lọc jobs theo status nếu có
+        from app.models.mongodb import mongodb
+
+        # Build query filter
+        query = {}
+        if status_filter:
+            query["status"] = status_filter
+
+        # Get total count
+        total = await mongodb.jobs_col.count_documents(query)
+
+        # Get jobs with pagination, sorted by created_at descending
+        cursor = mongodb.jobs_col.find(query).sort("created_at", -1).skip(offset).limit(limit)
+        jobs_from_db = await cursor.to_list(length=limit)
+
+        # Format jobs for response
         all_jobs = []
-        for job_id, job_data in job_service.jobs.items():
-            if status_filter and job_data.get("status") != status_filter:
-                continue
-            
+        for job_data in jobs_from_db:
             job_summary = {
-                "job_id": job_id,
+                "job_id": job_data.get("job_id"),
                 "status": job_data.get("status"),
                 "created_at": job_data.get("created_at"),
                 "completed_at": job_data.get("completed_at"),
                 "progress": job_data.get("progress", 0),
                 "resolution": job_data.get("resolution"),
-                "error_message": job_data.get("error_message")
+                "error_message": job_data.get("error_message"),
+                "audio_duration": job_data.get("audio_duration"),
+                "started_at": job_data.get("started_at"),
+                "queue_position": job_data.get("queue_position", 0)
             }
             all_jobs.append(job_summary)
-        
-        # Sort by created_at desc
-        all_jobs.sort(key=lambda x: x["created_at"], reverse=True)
-        
-        # Pagination
-        paginated_jobs = all_jobs[offset:offset + limit]
-        
+
+        # Get stats
+        stats = await job_service.get_stats()
+
         return {
-            "jobs": paginated_jobs,
-            "total": len(all_jobs),
+            "jobs": all_jobs,
+            "total": total,
             "limit": limit,
             "offset": offset,
-            "has_more": len(all_jobs) > offset + limit,
+            "has_more": total > offset + limit,
             "stats": stats
         }
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

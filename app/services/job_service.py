@@ -458,13 +458,19 @@ class JobService:
         # Example: 5s audio → 6 minutes processing time
         job_processing_time_minutes = audio_duration * AUDIO_TO_PROCESSING_RATIO
 
-        # Total time = batches to wait * this job's processing time + queue wait
-        # Queue wait assumes previous jobs also take similar time
-        total_wait_minutes = batches_to_wait * job_processing_time_minutes
+        # Calculate total waiting time
+        # - If first job (batches_to_wait = 0): use job's own processing time
+        # - If queued: add time for jobs ahead + this job's time
+        if batches_to_wait == 0:
+            # First job - estimate is just this job's processing time
+            total_wait_minutes = job_processing_time_minutes
+        else:
+            # Queued job - estimate time for jobs ahead
+            total_wait_minutes = batches_to_wait * job_processing_time_minutes
 
         # Store calculation metadata for debugging
         estimate_time_complete = (datetime.now() + timedelta(minutes=total_wait_minutes)).isoformat()
-        
+
         job_data = {
             "job_id": job_id,
             "status": JobStatus.PENDING,
@@ -482,6 +488,8 @@ class JobService:
             "background":background,
             "character":character,
             "estimate_time_complete": estimate_time_complete,
+            "estimate_waiting_time": int(total_wait_minutes),  # ✅ Estimated time in minutes (dynamic)
+            "initial_estimate_minutes": int(total_wait_minutes),  # ✅ Original estimate (never changes)
 
             "retry_count": 0
         }
@@ -589,10 +597,11 @@ class JobService:
                             estimated_total_minutes = audio_duration * AUDIO_TO_PROCESSING_RATIO
                             estimated_total_seconds = estimated_total_minutes * 60
 
-                            # Calculate remaining based on progress
-                            completed_seconds = estimated_total_seconds * (progress / 100)
-                            remaining_seconds = max(0, estimated_total_seconds - elapsed_seconds)
-                            # Round up để luôn hiển thị ít nhất 1 phút nếu còn time
+                            # Calculate remaining based on progress percentage
+                            # Example: 50% progress means 50% remaining
+                            remaining_percentage = (100 - progress) / 100
+                            remaining_seconds = max(0, estimated_total_seconds * remaining_percentage)
+                            # Round up to show at least 1 minute if time remains
                             remaining_minutes = max(1, int((remaining_seconds + 59) / 60))
                         elif progress > 0 and progress < 100:
                             # Fallback: calculate based on elapsed time and progress
@@ -614,11 +623,13 @@ class JobService:
                     # Need to account for:
                     # 1. Currently processing jobs
                     # 2. Jobs ahead in queue with their audio durations
+                    # 3. This job's own processing time
 
                     from config import AVERAGE_JOB_TIME_MINUTES
 
                     # Get this job's audio duration
-                    this_job_duration = job_data.get("audio_duration", AVERAGE_JOB_TIME_MINUTES * 60)
+                    this_job_audio_duration = job_data.get("audio_duration", AVERAGE_JOB_TIME_MINUTES * 60)
+                    this_job_processing_time = this_job_audio_duration * AUDIO_TO_PROCESSING_RATIO
 
                     # Calculate wait time from jobs ahead
                     wait_time_minutes = 0
@@ -628,16 +639,21 @@ class JobService:
                     busy_workers = workers_info.get("busy_workers", 0)
                     total_workers = workers_info.get("total_workers", 1)
 
-                    # If workers are busy, need to wait for them to finish
-                    if busy_workers > 0:
-                        # Estimate remaining time for processing jobs (use average)
-                        # TODO: Could be improved by tracking actual processing jobs
-                        wait_time_minutes += AVERAGE_JOB_TIME_MINUTES
-
                     # Get queue position
                     queue_pos = position  # Already calculated above
 
-                    if queue_pos > 0:
+                    if queue_pos == 0:
+                        # First job in queue - will start processing soon
+                        # Estimate is just this job's processing time
+                        wait_time_minutes = this_job_processing_time
+                    else:
+                        # Job is waiting in queue
+                        # If workers are busy, need to wait for them to finish
+                        if busy_workers > 0:
+                            # Estimate remaining time for processing jobs (use average)
+                            # TODO: Could be improved by tracking actual processing jobs
+                            wait_time_minutes += AVERAGE_JOB_TIME_MINUTES
+
                         # Get jobs ahead in queue and sum their durations
                         async with self.queue_lock:
                             jobs_ahead_count = queue_pos - 1
@@ -660,6 +676,9 @@ class JobService:
                         # Account for parallel workers (jobs can process in parallel)
                         if total_workers > 1:
                             wait_time_minutes = wait_time_minutes / total_workers
+
+                        # Add this job's processing time
+                        wait_time_minutes += this_job_processing_time
 
                     job_data["estimate_waiting_time"] = max(1, int(wait_time_minutes))
 
