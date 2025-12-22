@@ -6,7 +6,7 @@ if __name__ == "__main__":
         "app.main:app",
         host=API_HOST,
         port=API_PORT,
-        reload=True,
+        reload=False,  # Disabled for production stability
         log_level="info"
     )
 # ===================================
