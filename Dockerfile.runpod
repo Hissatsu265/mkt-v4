@@ -1,0 +1,87 @@
+# =========================
+#  RunPod Serverless Dockerfile
+# =========================
+# Optimized for RunPod serverless environment
+# Base: CUDA 12.8 + Ubuntu 22.04
+
+FROM nvidia/cuda:12.8.0-runtime-ubuntu22.04
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install OS dependencies
+RUN apt-get update && apt-get install -y \
+    python3 python3-pip python3-venv python3-dev \
+    ffmpeg git wget curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Ensure python3 is default python
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3 1
+RUN update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 1
+
+# -------------------------
+# Create workspace (RunPod standard directory)
+# -------------------------
+WORKDIR /workspace/app
+
+# Copy project files
+COPY . /workspace/app
+
+# -------------------------
+# Install Python packages
+# -------------------------
+RUN pip install --upgrade pip
+
+# Install RunPod SDK (critical for serverless)
+RUN pip install runpod
+
+# Install PyTorch 2.8 (CUDA 12.8) FIRST - required by sageattention
+RUN pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 \
+    --index-url https://download.pytorch.org/whl/cu128
+
+# Install ONNX dependencies
+RUN pip install onnx onnxruntime
+
+# Install base dependencies (without sageattention for now)
+RUN pip install \
+    fastapi==0.115.0 \
+    uvicorn[standard]==0.32.0 \
+    pydantic==2.11.7 \
+    aiofiles==24.1.0 \
+    python-multipart==0.0.12 \
+    pymongo motor \
+    einops \
+    mutagen \
+    mediapipe \
+    opencv-python \
+    numpy==1.26.4
+
+# Install sageattention separately (needs torch in the build environment)
+RUN pip install --no-build-isolation sageattention || pip install sageattention || echo "sageattention install failed, continuing..."
+
+# Install remaining project dependencies
+# Using || true to continue even if some requirements fail
+RUN pip install -r requirements.txt || true
+RUN pip install -r requirements0.txt || true
+RUN pip install -r requirements1.txt || true
+
+# -------------------------
+# Model Downloads (CONDITIONAL)
+# -------------------------
+# Skip if models already present in Network Volume
+# This allows pre-loading models to a RunPod Network Volume for faster cold starts
+RUN if [ ! -d "/workspace/app/ComfyUI/models/diffusion_models/wan2.1-i2v-14b-480p-Q8_0.gguf" ]; then \
+    echo "Downloading models..." && \
+    chmod +x download_model.sh && ./download_model.sh && \
+    chmod +x download_model_image.sh && ./download_model_image.sh && \
+    chmod +x install_custom_nodes.sh && ./install_custom_nodes.sh; \
+else \
+    echo "Models already present in network volume, skipping download"; \
+fi
+
+# -------------------------
+# Start RunPod Handler
+# -------------------------
+CMD ["python", "-u", "runpod_handler.py"]

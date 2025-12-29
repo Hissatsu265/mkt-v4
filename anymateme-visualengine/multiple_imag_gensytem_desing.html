@@ -1,0 +1,1331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Slide Image Generation - Realistic Process Flow</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            min-height: 100vh;
+            color: #333;
+            overflow-x: auto;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .controls {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .control-button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            margin: 0 10px;
+            border-radius: 8px;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        .control-button:hover {
+            background: #45a049;
+            transform: translateY(-2px);
+        }
+
+        .control-button.reset {
+            background: #f44336;
+        }
+
+        .control-button.reset:hover {
+            background: #da190b;
+        }
+
+        .control-button:disabled {
+            background: #888;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .process-flow {
+            display: flex;
+            flex-direction: column;
+            gap: 40px;
+            min-height: 800px;
+        }
+
+        .flow-stage {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            opacity: 0.3;
+            transform: translateY(20px);
+            transition: all 0.8s ease;
+            position: relative;
+        }
+
+        .flow-stage.active {
+            opacity: 1;
+            transform: translateY(0);
+            border-left: 5px solid #4CAF50;
+        }
+
+        .flow-stage.completed {
+            opacity: 1;
+            transform: translateY(0);
+            border-left: 5px solid #2196F3;
+            background: #f8f9ff;
+        }
+
+        .flow-stage.highlighted {
+            opacity: 1;
+            transform: translateY(0);
+            border-left: 5px solid #FF9800;
+            background: #fff8e1;
+            animation: highlight-pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes highlight-pulse {
+            0% { box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+            50% { box-shadow: 0 15px 35px rgba(255, 152, 0, 0.3); }
+            100% { box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+        }
+
+        .stage-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .stage-title {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+
+        .stage-status {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+
+        .stage-status.pending {
+            background: #ffeaa7;
+            color: #d63031;
+        }
+
+        .stage-status.processing {
+            background: #81ecec;
+            color: #00b894;
+            animation: pulse 2s infinite;
+        }
+
+        .stage-status.completed {
+            background: #55a3ff;
+            color: white;
+        }
+
+        .stage-status.highlighted {
+            background: #FF9800;
+            color: white;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+
+        .stage-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 25px;
+            align-items: start;
+        }
+
+        .data-section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid #e9ecef;
+        }
+
+        .data-title {
+            font-weight: bold;
+            color: #495057;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .data-content {
+            font-family: 'Courier New', monospace;
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 0.9em;
+            white-space: pre-wrap;
+            overflow-x: auto;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .json-key {
+            color: #81c784;
+        }
+
+        .json-string {
+            color: #ffb74d;
+        }
+
+        .json-number {
+            color: #64b5f6;
+        }
+
+        .json-boolean {
+            color: #f06292;
+        }
+
+        .stage-arrow {
+            text-align: center;
+            font-size: 2em;
+            color: #4CAF50;
+            margin: 20px 0;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+
+        .stage-arrow.visible {
+            opacity: 1;
+        }
+
+        .progress-bar {
+            background: #e9ecef;
+            height: 8px;
+            border-radius: 4px;
+            margin: 20px 0;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            background: linear-gradient(90deg, #4CAF50, #45a049);
+            height: 100%;
+            width: 0%;
+            transition: width 1s ease;
+            border-radius: 4px;
+        }
+
+        .image-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .image-item {
+            background: #fff;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+            transition: all 0.5s ease;
+            position: relative;
+        }
+
+        .image-item.processing {
+            border-color: #ffc107;
+            background: #fff8e1;
+            animation: processing-glow 2s infinite;
+        }
+
+        .image-item.completed {
+            border-color: #28a745;
+            background: #d4edda;
+        }
+
+        .image-item.failed {
+            border-color: #dc3545;
+            background: #f8d7da;
+        }
+
+        .image-item.accessible {
+            border-color: #17a2b8;
+            background: #d1ecf1;
+            animation: accessible-glow 3s infinite;
+        }
+
+        @keyframes processing-glow {
+            0% { box-shadow: 0 0 5px rgba(255, 193, 7, 0.5); }
+            50% { box-shadow: 0 0 20px rgba(255, 193, 7, 0.8); }
+            100% { box-shadow: 0 0 5px rgba(255, 193, 7, 0.5); }
+        }
+
+        @keyframes accessible-glow {
+            0% { box-shadow: 0 0 5px rgba(23, 162, 184, 0.5); }
+            50% { box-shadow: 0 0 20px rgba(23, 162, 184, 0.8); }
+            100% { box-shadow: 0 0 5px rgba(23, 162, 184, 0.5); }
+        }
+
+        .image-placeholder {
+            width: 80px;
+            height: 80px;
+            background: #e9ecef;
+            border-radius: 8px;
+            margin: 0 auto 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2em;
+            transition: all 0.5s ease;
+        }
+
+        .image-placeholder.completed {
+            background: #28a745;
+            color: white;
+        }
+
+        .image-placeholder.failed {
+            background: #dc3545;
+            color: white;
+        }
+
+        .image-placeholder.accessible {
+            background: #17a2b8;
+            color: white;
+        }
+
+        .access-button {
+            background: #17a2b8;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            cursor: pointer;
+            margin-top: 5px;
+            transition: all 0.3s ease;
+        }
+
+        .access-button:hover {
+            background: #138496;
+            transform: translateY(-1px);
+        }
+
+        .database-table {
+            background: #2d3748;
+            color: #e2e8f0;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-top: 15px;
+        }
+
+        .table-header {
+            background: #4a5568;
+            padding: 10px;
+            font-weight: bold;
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr;
+            gap: 10px;
+            font-size: 0.9em;
+        }
+
+        .table-row {
+            padding: 8px 10px;
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr;
+            gap: 10px;
+            border-bottom: 1px solid #4a5568;
+            font-size: 0.8em;
+            transition: background 0.3s ease;
+        }
+
+        .table-row:hover {
+            background: #4a5568;
+        }
+
+        .table-row.new-update {
+            background: #2d5a87;
+            animation: new-row-highlight 1s ease-out;
+        }
+
+        @keyframes new-row-highlight {
+            0% { background: #4CAF50; }
+            100% { background: #2d5a87; }
+        }
+
+        .status-badge {
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 0.7em;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .status-queued {
+            background: #ffc107;
+            color: #212529;
+        }
+
+        .status-processing {
+            background: #17a2b8;
+            color: white;
+        }
+
+        .status-completed {
+            background: #28a745;
+            color: white;
+        }
+
+        .status-failed {
+            background: #dc3545;
+            color: white;
+        }
+
+        .status-accessible {
+            background: #6f42c1;
+            color: white;
+        }
+
+        .timeline {
+            position: relative;
+            margin: 20px 0;
+        }
+
+        .timeline-item {
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+            opacity: 0.3;
+            transition: opacity 0.5s ease;
+        }
+
+        .timeline-item.active {
+            opacity: 1;
+        }
+
+        .timeline-dot {
+            width: 12px;
+            height: 12px;
+            background: #6c757d;
+            border-radius: 50%;
+            margin-right: 15px;
+            transition: all 0.3s ease;
+        }
+
+        .timeline-dot.active {
+            background: #28a745;
+            transform: scale(1.3);
+        }
+
+        .timeline-content {
+            font-size: 0.9em;
+            color: #6c757d;
+        }
+
+        .timeline-content.active {
+            color: #212529;
+            font-weight: bold;
+        }
+
+        .instructions {
+            background: rgba(255,255,255,0.1);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .real-time-access {
+            background: #e8f5e8;
+            border: 2px solid #4CAF50;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        .real-time-access h3 {
+            color: #2e7d32;
+            margin-bottom: 10px;
+        }
+
+        .real-time-access p {
+            color: #388e3c;
+            font-size: 0.9em;
+        }
+
+        .back-to-processing {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        .back-to-processing h4 {
+            color: #856404;
+            margin-bottom: 5px;
+        }
+
+        .back-to-processing p {
+            color: #856404;
+            font-size: 0.9em;
+        }
+
+        @media (max-width: 768px) {
+            .stage-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .table-header,
+            .table-row {
+                grid-template-columns: 1fr 1fr;
+                gap: 5px;
+            }
+            
+            .image-grid {
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎨 Slide Image Generation - Realistic Process Flow</h1>
+            <p>Watch how users can access completed images immediately while processing continues</p>
+        </div>
+
+        <div class="instructions">
+            <p>🚀 <strong>Realistic Process Flow:</strong> Images are processed sequentially, but users can access completed images immediately!</p>
+            <p>📊 See how the system works in real-time: Process 3 images → Access completed ones → Return to see remaining processing</p>
+        </div>
+
+        <div class="controls">
+            <button class="control-button" onclick="startProcess()" id="startBtn">🚀 Start Process</button>
+            <button class="control-button" onclick="pauseProcess()" id="pauseBtn" disabled>⏸️ Pause</button>
+            <button class="control-button reset" onclick="resetProcess()">🔄 Reset</button>
+        </div>
+
+        <div class="progress-bar">
+            <div class="progress-fill" id="progressFill"></div>
+        </div>
+
+        <div class="process-flow" id="processFlow">
+            <!-- Stage 1: Client Request -->
+            <div class="flow-stage" id="stage1">
+                <div class="stage-header">
+                    <div class="stage-title">📨 1. Client Request</div>
+                    <div class="stage-status pending" id="status1">PENDING</div>
+                </div>
+                <div class="stage-content">
+                    <div class="data-section">
+                        <div class="data-title">
+                            🔍 Request Payload
+                        </div>
+                        <div class="data-content" id="requestData"></div>
+                    </div>
+                    <div class="data-section">
+                        <div class="data-title">
+                            📊 Request Analysis
+                        </div>
+                        <div class="timeline" id="requestTimeline">
+                            <div class="timeline-item">
+                                <div class="timeline-dot"></div>
+                                <div class="timeline-content">POST /slide-image-gen-route</div>
+                            </div>
+                            <div class="timeline-item">
+                                <div class="timeline-dot"></div>
+                                <div class="timeline-content">Validate request structure</div>
+                            </div>
+                            <div class="timeline-item">
+                                <div class="timeline-dot"></div>
+                                <div class="timeline-content">Calculate total images: 6</div>
+                            </div>
+                            <div class="timeline-item">
+                                <div class="timeline-dot"></div>
+                                <div class="timeline-content">Generate request ID</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="stage-arrow" id="arrow1">⬇️</div>
+
+            <!-- Stage 2: Database Pre-logging -->
+            <div class="flow-stage" id="stage2">
+                <div class="stage-header">
+                    <div class="stage-title">💾 2. Database Pre-logging</div>
+                    <div class="stage-status pending" id="status2">PENDING</div>
+                </div>
+                <div class="stage-content">
+                    <div class="data-section">
+                        <div class="data-title">
+                            📝 Jobs Being Logged
+                        </div>
+                        <div class="database-table">
+                            <div class="table-header">
+                                <div>Job ID</div>
+                                <div>Slide</div>
+                                <div>Status</div>
+                                <div>Prompt</div>
+                            </div>
+                            <div id="databaseRows"></div>
+                        </div>
+                    </div>
+                    <div class="data-section">
+                        <div class="data-title">
+                            📈 API Response
+                        </div>
+                        <div class="data-content" id="apiResponse"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="stage-arrow" id="arrow2">⬇️</div>
+
+            <!-- Stage 3: Sequential Processing -->
+            <div class="flow-stage" id="stage3">
+                <div class="stage-header">
+                    <div class="stage-title">⚙️ 3. Sequential Image Processing</div>
+                    <div class="stage-status pending" id="status3">PENDING</div>
+                </div>
+                <div class="stage-content">
+                    <div class="data-section">
+                        <div class="data-title">
+                            🎯 Processing Queue
+                        </div>
+                        <div class="image-grid" id="imageGrid"></div>
+                        <div class="back-to-processing" id="backToProcessing" style="display: none;">
+                            <h4>🔄 Back to Processing</h4>
+                            <p>Remaining images are still being processed in the background...</p>
+                        </div>
+                    </div>
+                    <div class="data-section">
+                        <div class="data-title">
+                            📊 Real-time Database Status
+                        </div>
+                        <div class="database-table">
+                            <div class="table-header">
+                                <div>Job ID</div>
+                                <div>Status</div>
+                                <div>File Path</div>
+                                <div>Updated</div>
+                            </div>
+                            <div id="processingRows"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="stage-arrow" id="arrow3">⬇️</div>
+
+            <!-- Stage 4: Real-time Access -->
+            <div class="flow-stage" id="stage4">
+                <div class="stage-header">
+                    <div class="stage-title">🚀 4. Real-time Image Access</div>
+                    <div class="stage-status pending" id="status4">PENDING</div>
+                </div>
+                <div class="stage-content">
+                    <div class="data-section">
+                        <div class="data-title">
+                            ✅ Available Images
+                        </div>
+                        <div class="image-grid" id="availableImages"></div>
+                        <div class="real-time-access">
+                            <h3>🎯 Real-time Access</h3>
+                            <p>Users can immediately access completed images while others are still processing!</p>
+                        </div>
+                    </div>
+                    <div class="data-section">
+                        <div class="data-title">
+                            📊 Access API Demo
+                        </div>
+                        <div class="data-content" id="accessDemo"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="stage-arrow" id="arrow4">⬇️</div>
+
+            <!-- Stage 5: Final Results -->
+            <div class="flow-stage" id="stage5">
+                <div class="stage-header">
+                    <div class="stage-title">🏁 5. Process Complete</div>
+                    <div class="stage-status pending" id="status5">PENDING</div>
+                </div>
+                <div class="stage-content">
+                    <div class="data-section">
+                        <div class="data-title">
+                            📊 Final Statistics
+                        </div>
+                        <div class="data-content" id="finalStats"></div>
+                    </div>
+                    <div class="data-section">
+                        <div class="data-title">
+                            🎯 Status Check API
+                        </div>
+                        <div class="data-content" id="statusCheckDemo"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Dummy data
+        const dummyRequest = {
+            slides: [
+                {
+                    slide_number: 1,
+                    type: 1,
+                    content: [
+                        {
+                            job_id: "job_8a9c4d2e",
+                            image_prompt: "A modern office building with glass windows"
+                        },
+                        {
+                            job_id: "job_5f7e3b1a",
+                            image_prompt: "Business people in a meeting room"
+                        }
+                    ]
+                },
+                {
+                    slide_number: 2,
+                    type: 2,
+                    content: [
+                        {
+                            job_id: "job_2d8f6c4b",
+                            image_prompt: "Financial charts and graphs on computer screen"
+                        },
+                        {
+                            job_id: "job_9e3a7f5d",
+                            image_prompt: "Stock market trading floor with traders"
+                        }
+                    ]
+                },
+                {
+                    slide_number: 3,
+                    type: 1,
+                    content: [
+                        {
+                            job_id: "job_4b7d9f2e",
+                            image_prompt: "Team collaboration in modern workspace"
+                        },
+                        {
+                            job_id: "job_6c1e8a3f",
+                            image_prompt: "Digital transformation concept illustration"
+                        }
+                    ]
+                }
+            ]
+        };
+
+        let currentStage = 0;
+        let isProcessing = false;
+        let isPaused = false;
+        let allJobs = [];
+        let completedJobs = [];
+        let requestId = "req_a1b2c3d4e5f6";
+        let processingIndex = 0;
+        let showingRealTimeAccess = false;
+
+        // Extract all jobs from request
+        function extractJobs() {
+            allJobs = [];
+            dummyRequest.slides.forEach(slide => {
+                slide.content.forEach(content => {
+                    allJobs.push({
+                        ...content,
+                        slide_number: slide.slide_number,
+                        slide_type: slide.type,
+                        status: 'queued',
+                        created_at: new Date().toISOString(),
+                        file_path: null,
+                        error_message: null
+                    });
+                });
+            });
+        }
+
+        function formatJSON(obj) {
+            return JSON.stringify(obj, null, 2)
+                .replace(/"([^"]+)":/g, '<span class="json-key">"$1":</span>')
+                .replace(/: "([^"]+)"/g, ': <span class="json-string">"$1"</span>')
+                .replace(/: (\d+)/g, ': <span class="json-number">$1</span>')
+                .replace(/: (true|false)/g, ': <span class="json-boolean">$1</span>');
+        }
+
+        function updateProgress() {
+            const progress = ((currentStage + 1) / 5) * 100;
+            document.getElementById('progressFill').style.width = progress + '%';
+        }
+
+        function activateStage(stageNum) {
+            const stage = document.getElementById(`stage${stageNum}`);
+            const status = document.getElementById(`status${stageNum}`);
+            
+            if (stage) {
+                stage.classList.add('active');
+                status.textContent = 'PROCESSING';
+                status.className = 'stage-status processing';
+                
+                // Auto-scroll to the active stage
+                stage.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'center',
+                    inline: 'nearest'
+                });
+            }
+            
+            if (stageNum > 1) {
+                const prevArrow = document.getElementById(`arrow${stageNum - 1}`);
+                if (prevArrow) prevArrow.classList.add('visible');
+            }
+        }
+
+        function highlightStage(stageNum) {
+            const stage = document.getElementById(`stage${stageNum}`);
+            const status = document.getElementById(`status${stageNum}`);
+            
+            if (stage) {
+                stage.classList.remove('active', 'completed');
+                stage.classList.add('highlighted');
+                status.textContent = 'ACCESSING';
+                status.className = 'stage-status highlighted';
+                
+                // Auto-scroll to the highlighted stage
+                stage.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'center',
+                    inline: 'nearest'
+                });
+            }
+        }
+
+        function completeStage(stageNum) {
+            const stage = document.getElementById(`stage${stageNum}`);
+            const status = document.getElementById(`status${stageNum}`);
+            
+            if (stage) {
+                stage.classList.remove('active', 'highlighted');
+                stage.classList.add('completed');
+                status.textContent = 'COMPLETED';
+                status.className = 'stage-status completed';
+            }
+        }
+
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        async function stage1() {
+            activateStage(1);
+            
+            // Show request data
+            document.getElementById('requestData').innerHTML = formatJSON(dummyRequest);
+            
+            // Animate timeline slowly
+            const timelineItems = document.querySelectorAll('#requestTimeline .timeline-item');
+            for (let i = 0; i < timelineItems.length; i++) {
+                if (isPaused) return;
+                await sleep(1500); // Slower animation
+                timelineItems[i].classList.add('active');
+                timelineItems[i].querySelector('.timeline-dot').classList.add('active');
+                timelineItems[i].querySelector('.timeline-content').classList.add('active');
+            }
+            
+            await sleep(2000);
+            completeStage(1);
+            currentStage = 1;
+            updateProgress();
+        }
+
+        async function stage2() {
+            activateStage(2);
+            
+            // Show database logging
+            const dbRows = document.getElementById('databaseRows');
+            dbRows.innerHTML = '';
+            
+            extractJobs();
+            
+            for (let job of allJobs) {
+                if (isPaused) return;
+                const row = document.createElement('div');
+                row.className = 'table-row';
+                row.innerHTML = `
+                    <div>${job.job_id}</div>
+                    <div>Slide ${job.slide_number}</div>
+                    <div><span class="status-badge status-queued">QUEUED</span></div>
+                    <div>${job.image_prompt.substring(0, 20)}...</div>
+                `;
+                dbRows.appendChild(row);
+                await sleep(800); // Slower database logging
+            }
+            
+            // Show API response
+            const response = {
+                success: true,
+                message: `🚀 Started sequential generation of ${allJobs.length} images. Images will be available as they complete.`,
+                request_id: requestId,
+                total_images: allJobs.length,
+                status: "processing"
+            };
+            
+            document.getElementById('apiResponse').innerHTML = formatJSON(response);
+            
+            await sleep(2000);
+            completeStage(2);
+            currentStage = 2;
+            updateProgress();
+        }
+
+        async function stage3() {
+            activateStage(3);
+            
+            // Setup image grid
+            const imageGrid = document.getElementById('imageGrid');
+            imageGrid.innerHTML = '';
+            
+            allJobs.forEach(job => {
+                const imageItem = document.createElement('div');
+                imageItem.className = 'image-item';
+                imageItem.id = `image-${job.job_id}`;
+                imageItem.innerHTML = `
+                    <div class="image-placeholder">🖼️</div>
+                    <div><strong>Slide ${job.slide_number}</strong></div>
+                    <div>${job.job_id}</div>
+                    <div class="status-badge status-queued">QUEUED</div>
+                `;
+                imageGrid.appendChild(imageItem);
+            });
+            
+            // Process first 3 images
+            for (let i = 0; i < 3; i++) {
+                if (isPaused) return;
+                
+                const job = allJobs[i];
+                const imageItem = document.getElementById(`image-${job.job_id}`);
+                
+                // Update to processing
+                job.status = 'processing';
+                imageItem.classList.add('processing');
+                imageItem.querySelector('.status-badge').textContent = 'PROCESSING';
+                imageItem.querySelector('.status-badge').className = 'status-badge status-processing';
+                
+                // Update database table
+                updateProcessingTable();
+                
+                await sleep(4000); // Much slower processing time
+                
+                // 90% success rate
+                const success = Math.random() > 0.1;
+                
+                if (success) {
+                    job.status = 'completed';
+                    job.file_path = `/generated_images/${job.job_id}.png`;
+                    job.completed_at = new Date().toISOString();
+                    completedJobs.push(job);
+                    
+                    imageItem.classList.remove('processing');
+                    imageItem.classList.add('completed');
+                    imageItem.querySelector('.image-placeholder').textContent = '✅';
+                    imageItem.querySelector('.image-placeholder').classList.add('completed');
+                    imageItem.querySelector('.status-badge').textContent = 'COMPLETED';
+                    imageItem.querySelector('.status-badge').className = 'status-badge status-completed';
+                    
+                    // Add access button
+                    const accessBtn = document.createElement('button');
+                    accessBtn.className = 'access-button';
+                    accessBtn.textContent = '🔗 Access Now';
+                    accessBtn.onclick = () => showImageAccess(job);
+                    imageItem.appendChild(accessBtn);
+                } else {
+                    job.status = 'failed';
+                    job.error_message = 'Image generation service timeout';
+                    job.completed_at = new Date().toISOString();
+                    
+                    imageItem.classList.remove('processing');
+                    imageItem.classList.add('failed');
+                    imageItem.querySelector('.image-placeholder').textContent = '❌';
+                    imageItem.querySelector('.image-placeholder').classList.add('failed');
+                    imageItem.querySelector('.status-badge').textContent = 'FAILED';
+                    imageItem.querySelector('.status-badge').className = 'status-badge status-failed';
+                }
+                
+                updateProcessingTable();
+                await sleep(1000);
+            }
+            
+            processingIndex = 3;
+            
+            // Now show that we can access completed images
+            if (completedJobs.length > 0 && !isPaused) {
+                await sleep(4000); // Longer pause before showing access
+                showingRealTimeAccess = true;
+                await stage4(); // Show real-time access
+                await sleep(5000); // Longer time to understand the access feature
+                showingRealTimeAccess = false;
+                
+                // Return to processing view
+                highlightStage(3);
+                document.getElementById('backToProcessing').style.display = 'block';
+                await sleep(2000);
+                
+                // Continue processing remaining images
+                await continueProcessingRemaining();
+            }
+            
+            await sleep(1000);
+            completeStage(3);
+            currentStage = 3;
+            updateProgress();
+        }
+
+        async function continueProcessingRemaining() {
+            // Process remaining images
+            for (let i = processingIndex; i < allJobs.length; i++) {
+                if (isPaused) return;
+                
+                const job = allJobs[i];
+                const imageItem = document.getElementById(`image-${job.job_id}`);
+                
+                // Update to processing
+                job.status = 'processing';
+                imageItem.classList.add('processing');
+                imageItem.querySelector('.status-badge').textContent = 'PROCESSING';
+                imageItem.querySelector('.status-badge').className = 'status-badge status-processing';
+                
+                // Update database table
+                updateProcessingTable();
+                
+                await sleep(4000); // Much slower processing time
+                
+                // 90% success rate
+                const success = Math.random() > 0.1;
+                
+                if (success) {
+                    job.status = 'completed';
+                    job.file_path = `/generated_images/${job.job_id}.png`;
+                    job.completed_at = new Date().toISOString();
+                    completedJobs.push(job);
+                    
+                    imageItem.classList.remove('processing');
+                    imageItem.classList.add('completed');
+                    imageItem.querySelector('.image-placeholder').textContent = '✅';
+                    imageItem.querySelector('.image-placeholder').classList.add('completed');
+                    imageItem.querySelector('.status-badge').textContent = 'COMPLETED';
+                    imageItem.querySelector('.status-badge').className = 'status-badge status-completed';
+                    
+                    // Add access button
+                    const accessBtn = document.createElement('button');
+                    accessBtn.className = 'access-button';
+                    accessBtn.textContent = '🔗 Access Now';
+                    accessBtn.onclick = () => showImageAccess(job);
+                    imageItem.appendChild(accessBtn);
+                } else {
+                    job.status = 'failed';
+                    job.error_message = 'Image generation service timeout';
+                    job.completed_at = new Date().toISOString();
+                    
+                    imageItem.classList.remove('processing');
+                    imageItem.classList.add('failed');
+                    imageItem.querySelector('.image-placeholder').textContent = '❌';
+                    imageItem.querySelector('.image-placeholder').classList.add('failed');
+                    imageItem.querySelector('.status-badge').textContent = 'FAILED';
+                    imageItem.querySelector('.status-badge').className = 'status-badge status-failed';
+                }
+                
+                updateProcessingTable();
+                await sleep(1000);
+            }
+            
+            document.getElementById('backToProcessing').style.display = 'none';
+        }
+
+        async function stage4() {
+            if (!showingRealTimeAccess) {
+                activateStage(4);
+            } else {
+                highlightStage(4);
+            }
+            
+            // Show available images
+            const availableImages = document.getElementById('availableImages');
+            availableImages.innerHTML = '';
+            
+            completedJobs.forEach(job => {
+                const imageItem = document.createElement('div');
+                imageItem.className = 'image-item accessible';
+                imageItem.innerHTML = `
+                    <div class="image-placeholder accessible">🖼️</div>
+                    <div><strong>Slide ${job.slide_number}</strong></div>
+                    <div>${job.job_id}</div>
+                    <div class="status-badge status-accessible">ACCESSIBLE</div>
+                    <button class="access-button" onclick="downloadImage('${job.job_id}')">📥 Download</button>
+                `;
+                availableImages.appendChild(imageItem);
+            });
+            
+            // Show access demo
+            if (completedJobs.length > 0) {
+                const accessDemo = {
+                    endpoint: `GET /image-status/${completedJobs[0].job_id}`,
+                    response: {
+                        job_id: completedJobs[0].job_id,
+                        status: "completed",
+                        file_path: completedJobs[0].file_path,
+                        download_url: `https://api.example.com/download/${completedJobs[0].job_id}`,
+                        error_message: null,
+                        created_at: completedJobs[0].created_at,
+                        completed_at: completedJobs[0].completed_at,
+                        slide_number: completedJobs[0].slide_number,
+                        image_prompt: completedJobs[0].image_prompt
+                    }
+                };
+                
+                document.getElementById('accessDemo').innerHTML = formatJSON(accessDemo);
+            }
+            
+            if (!showingRealTimeAccess) {
+                await sleep(2000);
+                completeStage(4);
+                currentStage = 4;
+                updateProgress();
+            }
+        }
+
+        async function stage5() {
+            activateStage(5);
+            
+            // Calculate statistics
+            const completed = allJobs.filter(job => job.status === 'completed').length;
+            const failed = allJobs.filter(job => job.status === 'failed').length;
+            const total = allJobs.length;
+            
+            const stats = {
+                total_images: total,
+                completed: completed,
+                failed: failed,
+                success_rate: `${Math.round((completed / total) * 100)}%`,
+                processing_time: "1 minute 45 seconds",
+                average_per_image: "17.5 seconds",
+                real_time_access: "Available immediately upon completion"
+            };
+            
+            document.getElementById('finalStats').innerHTML = formatJSON(stats);
+            
+            // Show status check demo
+            const statusDemo = {
+                endpoint: "GET /batch-status/" + requestId,
+                response: {
+                    request_id: requestId,
+                    total_images: total,
+                    completed: completed,
+                    failed: failed,
+                    in_progress: 0,
+                    status: "completed",
+                    images: allJobs.map(job => ({
+                        job_id: job.job_id,
+                        status: job.status,
+                        file_path: job.file_path,
+                        download_url: job.status === 'completed' ? `https://api.example.com/download/${job.job_id}` : null
+                    }))
+                }
+            };
+            
+            document.getElementById('statusCheckDemo').innerHTML = formatJSON(statusDemo);
+            
+            await sleep(2000);
+            completeStage(5);
+            currentStage = 5;
+            updateProgress();
+        }
+
+        function updateProcessingTable() {
+            const processingRows = document.getElementById('processingRows');
+            processingRows.innerHTML = '';
+            
+            allJobs.forEach(job => {
+                const row = document.createElement('div');
+                row.className = 'table-row';
+                if (job.status === 'processing' || job.completed_at) {
+                    row.classList.add('new-update');
+                }
+                const statusClass = `status-${job.status}`;
+                row.innerHTML = `
+                    <div>${job.job_id}</div>
+                    <div><span class="status-badge ${statusClass}">${job.status.toUpperCase()}</span></div>
+                    <div>${job.file_path || 'N/A'}</div>
+                    <div>${new Date(job.completed_at || job.created_at).toLocaleTimeString()}</div>
+                `;
+                processingRows.appendChild(row);
+            });
+        }
+
+        function showImageAccess(job) {
+            alert(`🎯 Image Ready!\n\nJob ID: ${job.job_id}\nFile: ${job.file_path}\n\nThis image is now available for download and use in your presentation!`);
+        }
+
+        function downloadImage(jobId) {
+            const job = allJobs.find(j => j.job_id === jobId);
+            alert(`📥 Downloading Image\n\nJob ID: ${jobId}\nFile: ${job.file_path}\n\nIn a real system, this would start the download immediately!`);
+        }
+
+        async function continueProcess() {
+            try {
+                if (currentStage === 1 && !isPaused) await stage2();
+                if (currentStage === 2 && !isPaused) await stage3();
+                if (currentStage === 3 && !isPaused) await stage4();
+                if (currentStage === 4 && !isPaused) await stage5();
+                
+                if (!isPaused) {
+                    document.querySelectorAll('.stage-arrow').forEach(arrow => {
+                        arrow.classList.add('visible');
+                    });
+                    isProcessing = false;
+                    document.getElementById('startBtn').disabled = false;
+                    document.getElementById('pauseBtn').disabled = true;
+                }
+            } catch (error) {
+                console.error('Continue process error:', error);
+            }
+        }
+
+        // Main process control functions
+        async function startProcess() {
+            if (isProcessing && !isPaused) return;
+            
+            if (isPaused) {
+                isPaused = false;
+                document.getElementById('pauseBtn').textContent = '⏸️ Pause';
+                document.getElementById('pauseBtn').disabled = false;
+                continueProcess();
+                return;
+            }
+            
+            isProcessing = true;
+            isPaused = false;
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('pauseBtn').disabled = false;
+            document.getElementById('pauseBtn').textContent = '⏸️ Pause';
+            
+            try {
+                if (currentStage === 0) await stage1();
+                if (currentStage === 1 && !isPaused) await stage2();
+                if (currentStage === 2 && !isPaused) await stage3();
+                if (currentStage === 3 && !isPaused) await stage4();
+                if (currentStage === 4 && !isPaused) await stage5();
+                
+                if (!isPaused) {
+                    // Show all arrows
+                    document.querySelectorAll('.stage-arrow').forEach(arrow => {
+                        arrow.classList.add('visible');
+                    });
+                    isProcessing = false;
+                    document.getElementById('startBtn').disabled = false;
+                    document.getElementById('pauseBtn').disabled = true;
+                }
+            } catch (error) {
+                console.error('Process error:', error);
+            }
+        }
+
+        function pauseProcess() {
+            isPaused = !isPaused;
+            document.getElementById('pauseBtn').textContent = isPaused ? '▶️ Resume' : '⏸️ Pause';
+            
+            if (!isPaused) {
+                continueProcess();
+            }
+        }
+
+        function resetProcess() {
+            isProcessing = false;
+            isPaused = false;
+            currentStage = 0;
+            processingIndex = 0;
+            showingRealTimeAccess = false;
+            completedJobs = [];
+            
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('pauseBtn').disabled = true;
+            document.getElementById('pauseBtn').textContent = '⏸️ Pause';
+            document.getElementById('progressFill').style.width = '0%';
+            
+            // Reset all stages
+            document.querySelectorAll('.flow-stage').forEach(stage => {
+                stage.classList.remove('active', 'completed', 'highlighted');
+            });
+            
+            document.querySelectorAll('.stage-status').forEach(status => {
+                status.textContent = 'PENDING';
+                status.className = 'stage-status pending';
+            });
+            
+            document.querySelectorAll('.stage-arrow').forEach(arrow => {
+                arrow.classList.remove('visible');
+            });
+            
+            // Clear content
+            document.getElementById('requestData').innerHTML = '';
+            document.getElementById('databaseRows').innerHTML = '';
+            document.getElementById('apiResponse').innerHTML = '';
+            document.getElementById('imageGrid').innerHTML = '';
+            document.getElementById('availableImages').innerHTML = '';
+            document.getElementById('processingRows').innerHTML = '';
+            document.getElementById('finalStats').innerHTML = '';
+            document.getElementById('statusCheckDemo').innerHTML = '';
+            document.getElementById('accessDemo').innerHTML = '';
+            document.getElementById('backToProcessing').style.display = 'none';
+            
+            // Reset timeline
+            document.querySelectorAll('#requestTimeline .timeline-item').forEach(item => {
+                item.classList.remove('active');
+                item.querySelector('.timeline-dot').classList.remove('active');
+                item.querySelector('.timeline-content').classList.remove('active');
+            });
+            
+            // Clear jobs array
+            allJobs = [];
+        }
+    </script>
+</body>
+</html>
