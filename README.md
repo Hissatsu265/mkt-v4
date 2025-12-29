@@ -124,7 +124,7 @@ curl "https://hailee-unrepresentational-ronnie.ngrok-free.dev/api/v1/jobs/{job_i
 ```
 
 ```bash
-curl "http://localhost:8003/api/v1/jobs/{job_id}/status" 
+curl "http://localhost:8003/api/v1/jobs/{job_id}/status"
 ```
 
 #### Response:

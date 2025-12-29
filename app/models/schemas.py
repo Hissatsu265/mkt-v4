@@ -12,6 +12,7 @@ class Background(str, Enum):
     town = "town"
     forest = "northern"
     workshop = "workshop"
+    firework = "firework"
     
 
 class Resolution(str, Enum):
