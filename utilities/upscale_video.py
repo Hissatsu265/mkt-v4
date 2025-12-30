@@ -7,6 +7,7 @@ import subprocess
 import shutil
 import glob
 import numpy as np
+from utilities.ffmpeg_wrapper import run_ffmpeg_command
 # sys.path.append('/content/drive/MyDrive/20_6upscale_video/RealESRGAN-20250620T093117Z-1-001/RealESRGAN')
 current_dir = os.path.dirname(os.path.abspath(__file__))
 realesrgan_path = os.path.join(current_dir, 'RealESRGAN')
@@ -118,10 +119,13 @@ def extract_frames(video_path: str, output_dir: str):
     ]
 
     print(f"🎬 Đang tách video thành frames...")
-    result = subprocess.run(cmd, capture_output=True, text=True)
-
-    if result.returncode != 0:
-        print(f"❌ Lỗi khi tách frames: {result.stderr}")
+    try:
+        result = run_ffmpeg_command(cmd, timeout=300, retry_count=2)
+        if result.returncode != 0:
+            print(f"❌ Lỗi khi tách frames: {result.stderr}")
+            return False
+    except Exception as e:
+        print(f"❌ Lỗi khi tách frames: {str(e)}")
         return False
 
     frame_files = glob.glob(os.path.join(output_dir, 'frame_*.png'))
@@ -203,10 +207,13 @@ def create_video_from_frames(frames_dir: str, output_video_path: str, fps: float
     ]
 
     print(f"🎬 Đang tạo video từ frames...")
-    result = subprocess.run(cmd, capture_output=True, text=True)
-
-    if result.returncode != 0:
-        print(f"❌ Lỗi khi tạo video: {result.stderr}")
+    try:
+        result = run_ffmpeg_command(cmd, timeout=600, retry_count=2)
+        if result.returncode != 0:
+            print(f"❌ Lỗi khi tạo video: {result.stderr}")
+            return False
+    except Exception as e:
+        print(f"❌ Lỗi khi tạo video: {str(e)}")
         return False
 
     if original_video_path and os.path.exists(original_video_path):
@@ -224,9 +231,13 @@ def create_video_from_frames(frames_dir: str, output_video_path: str, fps: float
             '-y'
         ]
 
-        result = subprocess.run(cmd_audio, capture_output=True, text=True)
+        try:
+            result = run_ffmpeg_command(cmd_audio, timeout=300, retry_count=2)
+        except Exception as e:
+            print(f"⚠️ Lỗi khi thêm audio: {str(e)}")
+            result = None
 
-        if result.returncode == 0:
+        if result and result.returncode == 0:
             os.remove(output_video_path + '_no_audio.mp4')
             print(f"✅ Đã thêm audio vào video")
         else:

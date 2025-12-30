@@ -2,6 +2,7 @@ import os
 import subprocess
 import tempfile
 from moviepy.editor import VideoFileClip, concatenate_videoclips, vfx
+from utilities.ffmpeg_wrapper import run_ffmpeg_command
 
 def check_ffmpeg():
     from shutil import which
@@ -16,7 +17,9 @@ def transcode_to_mp4(input_path, out_path):
         "-c:a", "aac", "-b:a", "128k",
         out_path
     ]
-    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    result = run_ffmpeg_command(cmd, timeout=300, retry_count=2, log_output=False)
+    if result.returncode != 0:
+        raise RuntimeError(f"FFmpeg transcode failed: {result.stderr}")
 
 def ffmpeg_reverse(input_path, output_path):
     """Tạo file đảo thời gian (video + audio) bằng ffmpeg."""
@@ -26,7 +29,9 @@ def ffmpeg_reverse(input_path, output_path):
         "-af", "areverse",
         output_path
     ]
-    subprocess.run(cmd, check=True)
+    result = run_ffmpeg_command(cmd, timeout=600, retry_count=2)
+    if result.returncode != 0:
+        raise RuntimeError(f"FFmpeg reverse failed: {result.stderr}")
 
 def parse_resolution(res_str):
     """Chuyển '1280x720' → (1280, 720)"""
