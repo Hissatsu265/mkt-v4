@@ -7,6 +7,7 @@ import json
 import random
 import psutil
 from app.models.schemas import TransitionEffect
+import shutil
 
 import aiohttp
 import aiofiles
@@ -892,6 +893,8 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
 
         if background=="workshop" and event=="Christmas":
             prompts[0]="A festive cartoon style video of a character in a holiday workshop environment. The background shows soft ambient motion, warm light shifts, and gentle environmental details to keep the scene lively and believable. The character stands straight, calm, and natural, without exaggerated movements or expressions. In the background, a small wooden toy car moves across the scene one time then stop, passing smoothly behind the character without drawing too much attention."
+        # if background=="firework" and event=="Christmas":
+        #     prompts[0]="A high-quality 3D cartoon holiday video based on the reference image. Santa Claus stands centered, straight, calm, and natural, mostly still. Light snow falls gently. Fireworks appear one at a time, including golden chrysanthemum fireworks, soft willow fireworks, subtle crackle effects, and occasional fan-shaped launches from distant rooftops and far behind the character, rising at varied heights, bursting elegantly, and fully fading out before the next appears. No ring-shaped fireworks. Cinematic lighting, steady camera, warm festive night mood."
         # elif background=="northern" and event=="Christmas":
         #     prompts[0]="A charming cartoon style holiday video where the environment feels gently alive. Tree decorations shimmer with mild blinking patterns, soft light ripples across the snow, and tiny particles float slowly in the air. The character holds a steady stance, appearing calm and natural."
         #     print("use prompt of workshop")
@@ -900,6 +903,33 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
         # print(character)
         # import time
         # time.sleep(15)
+        if background=="firework" and event=="Christmas":
+            os.remove(str(cond_images[0]))
+      
+            # ==================replace character image for firework background=========
+            if character=="santa" and resolution=="16:9":
+                src_image=str(BASE_DIR)+"/character_image_firework/169/santa/1767077592-acf7c974.jpg"
+            elif character=="santa" and resolution=="9:16":
+                src_image=str(BASE_DIR)+"/character_image_firework/916/santa/first_frame1 (1).jpeg"
+
+            if character=="elf" and resolution=="16:9":
+                src_image=str(BASE_DIR)+"/character_image_firework/169/elf/10e98c15-cad6-4025-99ea-f89f62e2ee9a_0.jpg"
+            elif character=="elf" and resolution=="9:16":
+                src_image=str(BASE_DIR)+"/character_image_firework/916/elf/1767059929-012a2700.jpg"
+            
+            if character=="reindeer" and resolution=="16:9":
+                src_image =str(BASE_DIR)+"/character_image_firework/169/reindeer/1767059803-0635a074.jpg"
+            elif character=="reindeer" and resolution=="9:16":
+                src_image=str(BASE_DIR)+"/character_image_firework/916/reindeer/1767060685-d9bb08fd (1).jpg"
+
+            if character=="snowman" and resolution=="16:9":
+                src_image=str(BASE_DIR)+"/character_image_firework/169/snowman/1767081598-efe84df9.jpg"
+            elif character=="snowman" and resolution=="9:16":
+                src_image=str(BASE_DIR)+"/character_image_firework/916/snowman/Gemini_Generated_Image_1b943r1b943r1b94.png"
+            
+            os.makedirs(os.path.dirname(str(cond_images[0])), exist_ok=True)
+            shutil.copy2(src_image, str(cond_images[0]))
+        print("============sgageeeee===============")
         # =================================================================
       
         audiohavesecondatstart = add_silence_to_start(cond_audio_path, job_id, duration_ms=500)
