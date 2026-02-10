@@ -70,5 +70,5 @@ from pymongo import MongoClient
 pass_db=os.getenv("MONGODB_PASSWORD","MONGODB_Pass")
 MONGODB_URI = os.getenv("MONGODB_URI", "")
 MONGODB_DATABASE = os.getenv("MONGODB_DATABASE", "anymateme_eduhub_prod")
-MONGODB_JOBS_COLLECTION = os.getenv("MONGODB_JOBS_COLLECTION", "video_jobs")
+MONGODB_JOBS_COLLECTION = os.getenv("MONGODB_JOBS_COLLECTION", "mkt_jobs")
 MONGODB_EFFECT_JOBS_COLLECTION = os.getenv("MONGODB_EFFECT_JOBS_COLLECTION", "effect_jobs")

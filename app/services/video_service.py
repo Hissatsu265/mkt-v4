@@ -36,7 +36,7 @@ image_paths_product = []
 image_path_sideface = [] 
 image_paths_product_rout360=[]
 video_paths_product_rout360=[]
-event="Christmas"
+event=""
 full_text_ofauido=""
 
 # ComfyUI Process Pool - one instance per worker
@@ -275,9 +275,12 @@ def custom_random_sequence(n):
     # return chosen_sequence[:n]
     # ===============tà đạo===========================
     presets = [
-        [1, 9, 8, 9, 7, 5, 2],
-        [1, 8, 9, 5, 7, 1, 6],
-        [1, 9, 5, 9, 8, 1, 3]
+        # [1, 9, 8, 9, 7, 5, 2],
+        # [1, 8, 9, 5, 7, 1, 6],
+        # [1, 9, 5, 9, 8, 1, 3]
+        [1,  8,  7, 5, 2],
+        [1, 8,  5, 7, 1, 6],
+        [1,  5,  8, 1, 3]
     ]
     arr = random.choice(presets)
     result = []
@@ -305,7 +308,7 @@ def custom_random_sequence222(n):
     if n <= 0:
         return []
 
-    nums = [1, 8, 9,5]
+    nums = [1, 8, 5]
     sequence = []
     last_seen = {num: -10 for num in nums}  # lưu vị trí xuất hiện gần nhất
     last = None
@@ -352,7 +355,7 @@ def custom_random_sequence111(n):
     if n <= 0:
         return []
 
-    nums = [1, 8, 9]
+    nums = [1, 8]
     sequence = []
 
     # đánh dấu lần xuất hiện
@@ -398,8 +401,8 @@ def custom_random_sequence111(n):
         last_seen[value] = i
         last = value
 
-    # return sequence
-    return [9,9,9,9,9,9,9,1,5][:n]  
+    return sequence
+    # return [9,9,9,9,9,9,9,1,5][:n]  
     # return [2,3,4,2,3,4,2,3,4,2,3,4][:n]
 
 def get_video_path(resolution: str, character, background):
@@ -473,9 +476,9 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
     generate_output_filename = output_path_video
     list_scene=[]
     
-    # if prompts[0]=="" or prompts[0] is None or prompts[0].lower() == "none":
-    #     prompts[0]="A realistic video of a person confidently presenting a product they are holding. The person speaks clearly and professionally, as if explaining the product’s features in an advertisement. Their facial expression remains pleasant and natural, with slight movements to appear engaging but not exaggerated. Their hand gestures are smooth and minimal, focusing attention on the product, creating the impression of a calm and confident presenter in a product promotion video."
-    if get_audio_duration(cond_audio_path) > 10000:
+    if prompts[0]=="" or prompts[0] is None or prompts[0].lower() == "none":
+        prompts[0]="A realistic video of a person confidently presenting a product they are holding. The person speaks clearly and professionally, as if explaining the product’s features in an advertisement. Their facial expression remains pleasant and natural, with slight movements to appear engaging but not exaggerated. Their hand gestures are smooth and minimal, focusing attention on the product, creating the impression of a calm and confident presenter in a product promotion video."
+    if get_audio_duration(cond_audio_path) > 10:
         output_directory = "output_segments"
         os.makedirs(output_directory, exist_ok=True)
         output_paths,durations, result = process_audio_file(cond_audio_path, output_directory)
