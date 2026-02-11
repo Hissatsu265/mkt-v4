@@ -497,6 +497,11 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
             else:
                 list_random = custom_random_sequence222(len(output_paths))
                 prompts[0]="A realistic video of a person confidently giving a lecture. Their face remains neutral and professional, without expressions or head movement. Their hands moves up and down slowly and naturally to emphasize his words without swinging his arms from side to side, creating the impression of a teacher explaining a lesson."
+        print("=====================")
+        print("Random sequence for transition effects:", list_random)
+        time.sleep(20)
+        list_random=[8,3,8,1,1,1,1,1,1,1,1][:len(output_paths)]
+        print("=====================")
 
         # count = len(list(filter(lambda x: x != 1, list_random)))
         count = len(list(filter(lambda x: x ==2 or x==3, list_random)))
