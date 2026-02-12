@@ -498,7 +498,7 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
                 list_random = custom_random_sequence222(len(output_paths))
                 prompts[0]="A realistic video of a person confidently giving a lecture. Their face remains neutral and professional, without expressions or head movement. Their hands moves up and down slowly and naturally to emphasize his words without swinging his arms from side to side, creating the impression of a teacher explaining a lesson."
         print("=====================")
-        list_random=[7,7,1,1,1,1,1,1][:len(output_paths)]
+        # list_random=[7,7,1,1,1,1,1,1][:len(output_paths)]
         print("Random sequence for transition effects:", list_random)
         time.sleep(20)
         
@@ -1545,7 +1545,7 @@ async def generate_video_fast(  worker_id,gpu_id,prompt, cond_image, cond_audio_
         print(howmuch1)
         print(howmuch2)
         print("================")
-        time.sleep(15)
+        # time.sleep(15)
         try:
             for i in range(howmuch):
                 job_id1 = str(uuid.uuid4())
@@ -1811,7 +1811,7 @@ async def generate_image_with_comfyui( width,height, job_id ,input_image=None,pr
 
         print("prompt:",prompt)
         print("con:",input_image )
-        time.sleep(15)
+        # time.sleep(15)
 
         print("📤 Sending workflow to ComfyUI...")
         resp = await queue_prompt1(workflow, server_address)
