@@ -498,7 +498,7 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
                 list_random = custom_random_sequence222(len(output_paths))
                 prompts[0]="A realistic video of a person confidently giving a lecture. Their face remains neutral and professional, without expressions or head movement. Their hands moves up and down slowly and naturally to emphasize his words without swinging his arms from side to side, creating the impression of a teacher explaining a lesson."
         print("=====================")
-        # list_random=[8,2,1,1,1,1,1,1,1,1][:len(output_paths)]
+        list_random=[7,7,1,1,1,1,1,1][:len(output_paths)]
         print("Random sequence for transition effects:", list_random)
         time.sleep(20)
         
@@ -1392,9 +1392,9 @@ async def generate_video_cmd(prompt, cond_image, cond_audio_path, output_path, j
             await delete_file_async(str(video_path))
 
             # Only check RAM pressure after successful completion
-            if check_ram_status():
-                print(f"[Worker {worker_id}] 🚨 RAM pressure detected after successful job, restarting ComfyUI...")
-                await stop_comfyui_for_worker(worker_id)
+            # if check_ram_status():
+            # print(f"[Worker {worker_id}] 🚨 RAM pressure detected after successful job, restarting ComfyUI...")
+            await stop_comfyui_for_worker(worker_id)
                 # Will auto-restart on next job
 
             return output_path
@@ -1563,13 +1563,6 @@ async def generate_video_fast(  worker_id,gpu_id,prompt, cond_image, cond_audio_
             for i in range(howmuch1):
                 job_id1 = str(uuid.uuid4())
                 prompt_pairs = [
-#                     {
-#                         "image": "Create a realistic photo of the input product placed on a small pedestal or stand in a bright white studio corner. \
-# The background is pure white with soft natural light coming from one side, creating gentle shadows and realistic reflections on the surface. \
-# The product should look clean, sharp, and naturally lit — as if photographed in a professional studio with a minimal setup. \
-# Keep the product’s shape and texture unchanged.",
-#                         "video": "Create a smooth cinematic 180-degree rotation video of the input product. The product stays centered on a clean studio background with soft lighting and realistic reflections. The camera slowly orbits around the product in a complete circle, showing all sides with natural motion and focus depth. Keep the product perfectly detailed and consistent with the input image. Use gentle motion blur and subtle shadows to make it feel realistic. The style should look like a professional product commercial shot with high-end studio lighting."
-#                     },
                     {
                         "image": "Create a realistic image of the input product placed on a small stand or pedestal in a dark studio environment. \
 The background is deep black or dark grey, illuminated by a focused light source that highlights the product’s contours and reflections. \
@@ -1601,9 +1594,8 @@ Keep the product realistic and unchanged, with no distortion.",
                             height=height,
                             job_id=job_id1,
                             input_image=cond_image,
-                            prompt=image_prompt+ str(i)+" ."
+                            prompt=image_prompt
                         )
-                print(image_path)
                 image_paths_product_rout360.append(image_path[0])
                 video_paths_product_rout360.append(video_prompt)
 # ========================================================================================
@@ -1765,6 +1757,7 @@ async def generate_image_with_comfyui( width,height, job_id ,input_image=None,pr
     # await asyncio.sleep(8)
     try:
         print("🔄 Loading workflow...")
+
         if type_sideface=="sideface": 
             workflow_path=str(BASE_DIR)+"/workflow/QWen_change_pose.json"
         else:
@@ -1814,7 +1807,12 @@ async def generate_image_with_comfyui( width,height, job_id ,input_image=None,pr
         prefix = f"{job_id}/{job_id}"
         if "60" in workflow:
             workflow["60"]["inputs"]["filename_prefix"] = prefix
-        
+        print("============================")
+
+        print("prompt:",prompt)
+        print("con:",input_image )
+        time.sleep(15)
+
         print("📤 Sending workflow to ComfyUI...")
         resp = await queue_prompt1(workflow, server_address)
 
