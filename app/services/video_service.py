@@ -498,9 +498,10 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
                 list_random = custom_random_sequence222(len(output_paths))
                 prompts[0]="A realistic video of a person confidently giving a lecture. Their face remains neutral and professional, without expressions or head movement. Their hands moves up and down slowly and naturally to emphasize his words without swinging his arms from side to side, creating the impression of a teacher explaining a lesson."
         print("=====================")
+        # list_random=[8,2,1,1,1,1,1,1,1,1][:len(output_paths)]
         print("Random sequence for transition effects:", list_random)
         time.sleep(20)
-        list_random=[8,3,8,1,1,1,1,1,1,1,1][:len(output_paths)]
+        
         print("=====================")
 
         # count = len(list(filter(lambda x: x != 1, list_random)))
@@ -739,6 +740,8 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
 
             else:
                 output=await generate_video_fast(
+                    worker_id=worker_id,
+                    gpu_id=gpu_id,
                     prompt=prompts[current_value],
                     cond_image=str(cond_images[1]),
                     cond_audio_path=audiohavesecondatstart, 
@@ -1293,7 +1296,10 @@ async def generate_video_cmd(prompt, cond_image, cond_audio_path, output_path, j
         workflow["270"]["inputs"]["value"] = int(get_audio_duration(cond_audio_path)*30)
         # =============================================================
         
-        
+        if isinstance(prompt, tuple):
+
+            prompt = prompt[0] if len(prompt) > 0 else ""
+            print("chuyển r nhe heheh")
         if prompt.strip() == "" or prompt is None or prompt.lower() == "none" :
             workflow["241"]["inputs"]["positive_prompt"] = "A realistic video of a person confidently giving a lecture. Their face remains neutral and professional, without strong expressions or noticeable head movement. Their hands move up and down slowly and naturally to emphasize key points, without swinging side to side, creating the impression of a teacher clearly explaining a lesson."    
         else:
@@ -1507,7 +1513,7 @@ from asyncio import Semaphore
 
 video_semaphore = Semaphore(2)
 
-async def generate_video_fast(prompt, cond_image, cond_audio_path, output_path, job_id, resolution, type,first_time=True,howmuch=1,index=0,howmuch1=0,howmuch2=0,avt_image=""):
+async def generate_video_fast(  worker_id,gpu_id,prompt, cond_image, cond_audio_path, output_path, job_id, resolution, type,first_time=True,howmuch=1,index=0,howmuch1=0,howmuch2=0,avt_image=""):
     width=720
     height=1280
     str__kl="720x1280"
@@ -1534,6 +1540,12 @@ async def generate_video_fast(prompt, cond_image, cond_audio_path, output_path, 
         server_address= "127.0.0.1:8188"
         process = await start_comfyui1()
         # await asyncio.sleep(8)
+        print("1111")
+        print(howmuch)
+        print(howmuch1)
+        print(howmuch2)
+        print("================")
+        time.sleep(15)
         try:
             for i in range(howmuch):
                 job_id1 = str(uuid.uuid4())
@@ -1591,7 +1603,7 @@ Keep the product realistic and unchanged, with no distortion.",
                             input_image=cond_image,
                             prompt=image_prompt+ str(i)+" ."
                         )
-                # print(image_path)
+                print(image_path)
                 image_paths_product_rout360.append(image_path[0])
                 video_paths_product_rout360.append(video_prompt)
 # ========================================================================================
@@ -1820,7 +1832,7 @@ async def generate_image_with_comfyui( width,height, job_id ,input_image=None,pr
         return image_path
         
     except Exception as e:
-        print(f"❌ Error creating image with ComfyUI: {e}")
+        print(f"❌ Error in comfyui creating image with ComfyUI: {e}")
         raise
     finally:
         print("done 1 image")
@@ -1915,7 +1927,7 @@ async def wait_for_completion1(prompt_id, client_id, server_address):
 
 async def find_image_by_id(image_id, output_dir=str("ComfyUI/output")):
     def _find_files():
-        output_dir=str(BASE_DIR)+"/ComfyUI/output"
+        output_dir=str(BASE_DIR)+"/anymateme-visualengine/ComfyUI/output"
         target_dir = os.path.join(output_dir, str(image_id))
         if not os.path.exists(target_dir):
             print(f"❌ Directory not found: {target_dir}")
