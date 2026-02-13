@@ -500,7 +500,6 @@ async def run_job(job_id, prompts, cond_images, cond_audio_path,output_path_vide
         print("=====================")
         # list_random=[7,7,1,1,1,1,1,1][:len(output_paths)]
         print("Random sequence for transition effects:", list_random)
-        time.sleep(20)
         
         print("=====================")
 
